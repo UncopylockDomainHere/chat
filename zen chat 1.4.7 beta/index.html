@@ -1,0 +1,3553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Zen Chat</title>
+  <style>
+    ::-webkit-scrollbar { display: none; }
+    :root{
+      --bg:#36393f; --sidebar:#2f3136; --panel:#40444b; --muted:#8e9297; --text:#dcddde; --accent:#5865f2; --danger:#ff5c5c;
+    }
+    html,body { height:100%; margin:0; font-family:"Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background:var(--bg); color:var(--text); }
+    .app { display:flex; height:100vh; overflow:hidden; }
+
+    /* Sidebar */
+    #sidebar { width:300px; background:var(--sidebar); display:flex; flex-direction:column; border-right:1px solid #202225; }
+    #channelsHeader { display:flex; align-items:center; justify-content:space-between; padding:12px 14px; border-bottom:1px solid #202225; gap:8px; }
+    #channelsHeader h3 { margin:0; font-size:13px; color:var(--muted); text-transform:uppercase; letter-spacing:0.6px; flex:1; }
+    #openSettings, #addEntityBtn { background:transparent; border:1px solid rgba(255,255,255,0.04); color:var(--text); padding:6px 8px; border-radius:6px; cursor:pointer; display:inline-flex; align-items:center; gap:6px; }
+    #channelsWrap { flex:1; overflow:auto; padding:10px; }
+
+    .category { margin-bottom:8px; user-select:none; }
+    .categoryHeader { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:6px; cursor:pointer; font-weight:600; color:#e6e6e6; }
+    .categoryHeader:hover { background:#313338; }
+    .cat-arrow { display:inline-block; width:14px; text-align:center; transform:rotate(0deg); transition:transform .15s ease; color:var(--muted); }
+    .cat-arrow.open { transform:rotate(90deg); color:var(--text); }
+    .channelsList { margin-left:18px; margin-top:6px; display:block; }
+    .channelItem { padding:6px 8px; border-radius:6px; margin:4px 0; color:#b9bbbe; cursor:pointer; font-size:14px; display:flex; align-items:center; gap:8px; position:relative; padding-left:18px; transition:background .15s ease; }
+    .channelItem:hover { background:#393c43; color:#fff; }
+    .channelItem.active { background:#4f545c; color:#fff; }
+    .channel-lock { margin-left:auto; font-size:12px; color:var(--muted); }
+    .channel-dot { position:absolute; left:-6px; top:50%; transform:translateY(-50%); width:10px; height:10px; border-radius:50%; background:#fff; box-shadow:0 0 0 2px rgba(0,0,0,0.25) inset; }
+
+    /* Main */
+    #main { flex:1; display:flex; flex-direction:column; width: 50%;}
+    #chat { flex:1; padding:20px; overflow-y:auto; display:flex; flex-direction:column; gap:12px; background:linear-gradient(180deg, rgba(255,255,255,0.01), transparent); }
+    .message { display:flex; align-items:flex-start; padding:10px; border-radius:8px; transition:0.2s; background:rgba(0,0,0,0.06); }
+    .message:hover { box-shadow: 0 0 15px rgba(88,101,242,0.06); }
+    .message img.avatar { width:40px; height:40px; border-radius:50%; margin-right:12px; object-fit:cover; }
+    .message-content { flex:1; overflow: auto;}
+    .message-header { font-size:14px; font-weight:700; color:#fff; margin-bottom:4px; display:flex; align-items:center; gap:8px; }
+    .message-header small { color:#72767d; font-weight:400; font-size:12px; }
+    .message-text { font-size:15px; line-height:1.5; word-wrap:break-word; white-space:pre-wrap; }
+
+    /* Input */
+    #input { display:flex; padding:14px; background:var(--panel); border-top:1px solid #202225; border-radius: 7px; gap:10px; align-items:center; position:relative; }
+    #messageInput { flex:1; padding:12px 14px; border-radius:10px; border:none; background:#303338; color:var(--text); font-size:15px; }
+    #messageInput:focus { outline:none; background:#2f3136; }
+    #sendBtn { padding:10px 18px; border:none; border-radius:10px; background:#505050; color:#fff; font-weight:700; cursor:pointer; }
+    #sendBtn:hover { background:#404040; }
+
+    /* Overlays for cooldown/timeout/read-only */
+    .inputOverlay { position:absolute; left:14px; right:14px; top:14px; bottom:14px; display:flex; align-items:center; justify-content:center; gap:10px; pointer-events:none; }
+    .overlayBox { pointer-events:auto; background:#2b2f33; padding:10px 12px; border-radius:8px; color:#fff; font-weight:700; display:flex; align-items:center; gap:10px; }
+    .fadeOut { animation: fadeOutSlide .6s forwards; }
+    @keyframes fadeOutSlide {
+      0% { opacity:1; transform:translateY(0); }
+      100% { opacity:0; transform:translateY(-8px); }
+    }
+
+    .cooldown-banner { position:absolute; left:14px; top:-40px; right:14px; background:var(--danger); color:#fff; padding:8px 12px; border-radius:8px; text-align:center; display:none; z-index:10; visibility: hidden;}
+    .timeout-banner { position:absolute; left:14px; top:-80px; right:14px; background:#ff9b9b; color:#2b2b2b; padding:8px 12px; border-radius:8px; text-align:center; display:none; z-index:10; }
+
+    /* Users */
+    #users { width:240px; background:var(--sidebar); border-left:1px solid #202225; display:flex; flex-direction:column; }
+    #users h3 { padding:12px 16px; font-size:12px; font-weight:600; color:var(--muted); text-transform:uppercase; }
+    #userList { overflow:auto; flex:1; }
+    .userItem { padding:8px; border-radius:6px; color:#b9bbbe; display:flex; gap:8px; align-items:center; }
+    .userItem:hover { background:#393c43; color:#fff; }
+    .userAvatar { width:28px; height:28px; border-radius:50%; object-fit:cover; }
+
+    /* Modal popup (create) */
+    #createPopupOverlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); align-items:center; justify-content:center; z-index:50; }
+    #createPopup { width:380px; background:#2f3136; border-radius:10px; padding:14px; box-shadow:0 8px 30px rgba(0,0,0,0.6); }
+    #createPopup h2 { margin:0 0 10px 0; color:#fff; }
+    #createPopup .btn { width:100%; padding:10px; margin-top:8px; border-radius:8px; border:none; cursor:pointer; font-weight:700; }
+    #createPopup .btn.cat { background:#494b51; color:#fff; }
+    #createPopup .btn.chan { background:#494b51; color:#fff; }
+    #createPopup .btn.cat:hover { background:#5865f2; color:#fff; }
+    #createPopup .btn.chan:hover { background:#5865f2; color:#fff; }
+
+#categorySelect { background: #27292d; color: #dcddde; border: none; border-radius: 10px; flex: 1; padding: 12px 14px; }
+#newChannelName { background: #27292d; color: #dcddde; border: none; border-radius: 10px; flex: 1; padding: 12px 14px; }
+#newChannelChattable { background: #27292d; color: #dcddde; border: none; border-radius: 10px; flex: 1; padding: 12px 14px; }
+
+#newCategoryName { background: #27292d; color: #dcddde; border: none; border-radius: 10px; flex: 1; padding: 12px 14px; }
+#newCategoryDesc { background: #27292d; color: #dcddde; border: none; border-radius: 10px; flex: 1; padding: 12px 14px; }
+
+    .muted { color:var(--muted); font-size:13px; }
+    .deleteBtn { margin-left:8px; background:#ff5c5c; color:white; border:none; border-radius:6px; padding:6px 8px; cursor:pointer; font-weight:700; }
+
+    /* Settings modal */
+    #settingsOverlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); align-items:center; justify-content:center; z-index:60; }
+    #settings { background:#2f3136; padding:20px; border-radius:10px; width:420px; max-width:95%; display:flex; flex-direction:column; }
+    #settings h2 { color:#fff; margin-top:0; }
+    #settings input { margin:6px 0; padding:10px; border:none; border-radius:6px; background:#202225; color:#dcddde; }
+    #settings button { margin-top:6px; padding:10px; border:none; border-radius:6px; background:#5865f2; color:white; font-weight:600; cursor:pointer; }
+
+    /* Auth Modal (forced) */
+    #authOverlay { position:fixed; inset:0; background:rgba(0,0,0,0.9); display:flex; align-items:center; justify-content:center; z-index:1000; }
+    #authBox { width:380px; background:#2f3136; padding:20px; border-radius:8px; display:flex; flex-direction:column; gap:10px; }
+    #authBox h2 { margin:0; color:#fff; }
+    #authBox input { padding:10px; border:none; border-radius:6px; background:#202225; color:#dcddde; }
+    #authBox button { padding:10px; border:none; border-radius:6px; background:var(--accent); color:white; cursor:pointer; font-weight:700; }
+    #authSwitch { color:var(--text-muted); text-align:center; cursor:pointer; }
+    #authSwitch span { color:var(--accent); cursor:pointer; text-decoration:underline; }
+
+    /* message image styling */
+    .msg-embed-img { max-width:420px; max-height:480px; border-radius:8px; display:block; margin-top:8px; }
+
+  #popup {position: fixed; top: -200px; left: 50%; transform: translateX(-50%); background: #333; color: white; padding: 20px 30px; border-radius: 10px; font-size: 18px; transition: top 0.6s ease; box-shadow: 0px 4px 10px rgba(0,0,0,0.25); max-width: 90%; text-align: center; z-index: 9999;}
+
+  #popup.show {top: 40px;}
+
+.offline {
+  opacity: 0.45;
+}
+
+#users {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* Title */
+#users h3 {
+  margin-bottom: 6px;
+}
+
+/* wrapper contains both online and offline */
+#userListsWrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 8px; /* keeps them close but not touching */
+  padding: 0 10px 10px 10px;
+  overflow: hidden;
+}
+
+/* each block (online/offline) */
+.userSection {
+  display: flex;
+  flex-direction: column;
+  height: 100%; /* makes both lists balanced & scrollable */
+}
+
+/* title above each section */
+.sectionTitle {
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+/* scrollable lists */
+.scrollSection {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 5px;
+}
+
+#messageUserBtn:hover {
+  background: #4752c4;
+}
+
+.message-text .mention {
+    color: var(--accent);
+    font-weight: 700;
+}
+
+.message-text .mention:hover {
+    opacity: 0.8;
+}
+
+.message-text .mention {
+    color: var(--accent);
+    font-weight: 700;
+    text-decoration: none;
+}
+
+/* Message action trigger (replaces delete button) */
+.msgActionsBtn {
+  margin-left: 8px;
+  background: transparent;
+  border: none;
+  color: #b9bbbe;
+  cursor: pointer;
+  font-size: 18px;
+}
+
+.msgActionsBtn:hover {
+  color: white;
+}
+
+/* Popup menu */
+.msgActionsMenu {
+  position: absolute;
+  background: #2f3136;
+  border-radius: 8px;
+  padding: 6px;
+  display: flex;
+  gap: 6px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.45);
+  z-index: 9999;
+}
+
+/* Icon buttons */
+.msgActionItem {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  border: none;
+  background: #40444b;
+  color: white;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.msgActionItem:hover {
+  background: #5865f2;
+}
+
+.msgActionItem.danger:hover {
+  background: #ff5c5c;
+}
+
+/* Reaction Emoji Picker */
+.reaction-ui {
+  position: absolute;
+  background: #2f3136;
+  border-radius: 10px;
+  padding: 8px;
+  width: 300px;
+  max-height: 260px;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  box-shadow: 0 8px 25px rgba(0,0,0,0.6);
+  z-index: 10000;
+}
+
+.reaction-ui button {
+  font-size: 16px;
+  background: #40444b;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  padding: 6px;
+}
+
+.reaction-ui button:hover {
+  background: #5865f2;
+}
+
+/* Channel / Category context menu */
+.channelContextMenu {
+  position: fixed;
+  background: #2f3136;
+  border-radius: 10px;
+  padding: 6px;
+  display: flex;
+  gap: 6px;
+  box-shadow: 0 8px 25px rgba(0,0,0,0.6);
+  z-index: 10000;
+}
+
+.channelContextBtn {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: none;
+  background: #40444b;
+  color: white;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.channelContextBtn:hover {
+  background: #5865f2;
+}
+
+.channelContextBtn.danger:hover {
+  background: #ff5c5c;
+}
+
+.msg-embed-img {
+  cursor: zoom-in;
+}
+
+  </style>
+</head>
+<body>
+  <div class="app">
+  <div id="popup"></div>
+    <!-- Sidebar -->
+    <div id="sidebar">
+      <div id="channelsHeader">
+        <h3>Channels</h3>
+        <div style="display:flex; gap:8px;">
+          <button id="openSettings" title="Open settings">⚙️</button>
+          <button id="addEntityBtn" title="Create category or channel" style="display:none;">＋</button>
+        </div>
+      </div>
+      <div id="channelsWrap"></div>
+    </div>
+
+    <!-- Main chat -->
+    <div id="main">
+      <div id="chat" aria-live="polite"></div>
+
+      <div id="input">
+
+<button id="pollMenuBtn" style="
+    background:#505050; 
+    border:none;
+    color:white;
+    padding:10px 14px;
+    border-radius:10px;
+    cursor:pointer;
+    font-weight:700;
+">＋</button>
+
+        <input id="messageInput" placeholder="Select a channel to start chatting..." disabled autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+
+<button id="reactionInputBtn" title="Add reaction"
+  style="
+    background:#505050;
+    border:none;
+    color:white;
+    padding:6px 10px;
+    border-radius:10px;
+    cursor:pointer;
+    font-size:18px;
+  "
+>😊</button>
+
+        <button id="sendBtn" disabled>Send</button>
+
+        <div class="cooldown-banner" id="cooldownBanner">⏳ Wait for cooldown!</div>
+        <div class="timeout-banner" id="timeoutBanner">🚫 You are timed out! (00:00)</div>
+
+        <!-- Overlays for cooldown/timeout/read-only -->
+        <div id="overlayContainer" class="inputOverlay" style="display:none;">
+          <div id="overlayBox" class="overlayBox"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Users -->
+<div id="users">
+  <h3>Users</h3>
+
+  <div id="userListsWrapper">
+    <div class="userSection">
+      <div class="sectionTitle">Online</div>
+      <div id="userList" class="scrollSection"></div>
+    </div>
+
+    <div class="userSection">
+      <div class="sectionTitle">Offline</div>
+      <div id="offlineList" class="scrollSection"></div>
+    </div>
+  </div>
+</div>
+  </div>
+
+  <!-- Settings modal -->
+  <div id="settingsOverlay">
+    <div id="settings">
+      <button id="settingsClose" style="align-self:flex-end; background:none; border:none; color:#b9bbbe; font-size:18px; cursor:pointer; position: absolute; top: 30%;">✖</button>
+<h2>Settings</h2>
+<!-- YOUR NEW SETTINGS BELOW -->
+<label style="display:flex; align-items:center; gap:10px; font-size:16px;">
+  Profanity Filter:
+  <input type="checkbox" id="profanityToggle">
+</label>
+<!-- KEEP THESE BUT HIDE THEM -->
+<div style="display:none;">
+  <input id="usernameField">
+  <input id="passwordField">
+  <button id="signUpBtn"></button>
+  <button id="loginBtn"></button>
+  <button id="logoutBtn"></button>
+</div>
+<div style="">
+  <h4>Profile Picture</h4>
+  <input id="pfpField" placeholder="Profile Picture URL">
+  <button id="updateProfileBtn">Apply!</button>
+</div>
+<hr style="opacity:0.2; margin:12px 0;">
+
+<label style="display:flex; align-items:center; gap:10px; font-size:16px;">
+  Automatic Login
+  <input type="checkbox" id="autoLoginToggle">
+</label>
+
+<button id="settingsLogoutBtn"
+  style="background:#ff5c5c; margin-top:12px;">
+  Log Out
+</button>
+    </div>
+  </div>
+
+  <!-- Create popup -->
+  <div id="createPopupOverlay">
+    <div id="createPopup">
+      <h2>Create</h2>
+      <div id="createMain">
+        <button id="openCreateCategory" class="btn cat">Create Category</button>
+        <button id="openCreateChannel" class="btn chan">Create Channel</button>
+        <button id="cancelCreate" style="margin-top:8px; width:100%; padding:8px; background:transparent; border:1px solid #333; color:#ccc; border-radius:6px;">Cancel</button>
+      </div>
+
+      <div id="createCategoryForm" style="display:none;">
+        <label style="color:#fff">Category name</label>
+        <input id="newCategoryName" placeholder="e.g. Text Channels">
+        <br>
+        <br>
+        <label style="margin-top:8px;color:#fff">Category description</label>
+        <input id="newCategoryDesc" placeholder="Description (optional)">
+        <div style="display:flex; gap:8px; margin-top:10px;">
+          <button id="createCategoryBtn" class="btn cat">Create Category</button>
+          <button id="backFromCategory" style="background:#40444b; color:#fff; border:none; border-radius:6px; padding:8px;">Back</button>
+        </div>
+      </div>
+
+      <div id="createChannelForm" style="display:none;">
+        <label style="color:#fff">Pick category</label>
+        <select id="categorySelect"></select>
+        <br>
+        <br>
+        <label style="margin-top:8px;color:#fff">Channel name</label>
+        <input id="newChannelName" placeholder="e.g. general">
+        <br>
+        <br>
+        <label style="margin-top:8px;color:#fff">Chattable?</label>
+        <select id="newChannelChattable"><option value="true">True</option><option value="false">False</option></select>
+        <div style="display:flex; gap:8px; margin-top:10px;">
+          <button id="createChannelBtn" class="btn chan">Create Channel</button>
+          <button id="backFromChannel" style="background:#40444b; color:#fff; border:none; border-radius:6px; padding:8px;">Back</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Auth Modal (forced) -->
+  <div id="authOverlay">
+    <div id="authBox">
+      <h2 id="authTitle">Sign Up</h2>
+      <input id="authUsername" placeholder="Username (lowercase recommended)" maxlength="20">
+      <input id="authPassword" type="password" placeholder="Password">
+      <input id="authPfp" placeholder="Profile Picture URL (optional)">
+      <button id="authActionBtn">Sign Up</button>
+      <p id="authSwitch">Already have an account? <span id="toggleAuth">Log In</span></p>
+    </div>
+  </div>
+
+<!-- User Profile Popup -->
+<div id="userProfileOverlay" style="
+  display:none; 
+  position:fixed; inset:0;
+  background:rgba(0,0,0,0.55);
+  align-items:center; justify-content:center;
+  z-index:9999;
+">
+  <div id="userProfileBox" style="
+    width:340px; background:#2f3136;
+    padding:18px; border-radius:10px;
+    box-shadow:0 8px 25px rgba(0,0,0,0.5);
+    text-align:center;
+  ">
+    <button id="closeUserProfile" style="
+      float:right; background:none; border:none;
+      color:#bbb; font-size:18px; cursor:pointer;
+      margin-bottom:8px;
+    ">✖</button>
+
+    <img id="profilePfp" src="" style="
+      width:90px; height:90px; border-radius:50%;
+      object-fit:cover; margin-top:10px;
+    ">
+
+    <h2 id="profileUsername" style="
+      color:white; margin-top:12px; font-size:20px;
+    "></h2>
+
+    <!-- Buttons -->
+    <div style="margin-top:15px; display:flex; flex-direction:column; gap:10px;">
+      <button id="messageUserBtn" style="
+        background:#505050; 
+        color:white; 
+        padding:10px; 
+        border:none; 
+        border-radius:6px;
+        font-weight:600;
+        cursor:pointer;
+        transition:background .2s;
+      ">Message</button>
+
+      <button id="reportUserBtn" style="
+        background:#ff4c4c; 
+        color:white; 
+        padding:10px; 
+        border:none; 
+        border-radius:6px;
+        font-weight:600;
+        cursor:pointer;
+      ">Report</button>
+    </div>
+  </div>
+</div>
+
+<!-- Report UI -->
+<div id="reportOverlay" style="
+  display:none;
+  position:fixed; inset:0;
+  background:rgba(0,0,0,0.55);
+  align-items:center; justify-content:center;
+  z-index:10000;
+">
+  <div style="
+    width:420px; 
+    background:#2f3136;
+    padding:20px; 
+    border-radius:10px;
+    text-align:center;
+  ">
+    <h2 style="color:white;">Report this person</h2>
+
+    <!-- Google Form (replace YOURFORMID) -->
+    <iframe id="reportFormFrame" src="" style="
+      width:100%; height:400px; 
+      border:none; margin-top:10px;
+      border-radius:8px;
+    "></iframe>
+
+    <button id="closeReportOverlay" style="
+      margin-top:12px;
+      background:#555;
+      color:white;
+      border:none;
+      padding:10px;
+      border-radius:6px;
+      cursor:pointer;
+    ">Close</button>
+  </div>
+</div>
+<!-- Poll Menu Overlay -->
+<div id="pollMenuOverlay" style="
+  display:none;
+  position:fixed; inset:0;
+  background:rgba(0,0,0,0.55);
+  align-items:center; justify-content:center;
+  z-index:9000;
+">
+  <div style="
+    width:300px; 
+    background:#2f3136;
+    padding:20px;
+    border-radius:12px;
+  ">
+    <h3 style="color:white; margin-top:0;">Create</h3>
+
+    <button id="openPollsUI" style="
+      width:100%; background:#5865f2; color:white; 
+      border:none; padding:10px; border-radius:8px;
+      font-weight:600; cursor:pointer; margin-bottom:10px;
+    ">Polls</button>
+
+    <button id="closePollMenu" style="
+      width:100%; margin-top:12px;
+      background:#444; color:white;
+      border:none; padding:8px; border-radius:6px;
+      cursor:pointer;
+    ">Cancel</button>
+  </div>
+</div>
+
+<!-- Updates / Onboarding UI -->
+<div id="updatesOverlay" style="
+  display:none;
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,0.6);
+  align-items:center;
+  justify-content:center;
+  z-index:12000;
+">
+  <div id="updatesBox" style="
+    width:420px;
+    background:#2f3136;
+    padding:24px;
+    border-radius:12px;
+    box-shadow:0 10px 30px rgba(0,0,0,0.7);
+    display:flex;
+    flex-direction:column;
+    gap:16px;
+  ">
+
+    <h2 style="margin:0;color:white;">Tutorial and Updates</h2>
+
+    <!-- Page Content -->
+    <div id="updatesContent" style="
+      color:#dcddde;
+      font-size:15px;
+      min-height:120px;
+    "></div>
+
+    <!-- Navigation row -->
+<div style="
+  display:grid;
+  grid-template-columns: auto 1fr auto;
+  align-items:center;
+  margin-top:10px;
+  gap:10px;
+">
+
+  <!-- Back -->
+  <button id="updatesBackBtn" style="
+    background:#555;
+    color:white;
+    border:none;
+    padding:10px 16px;
+    border-radius:8px;
+    cursor:pointer;
+  ">Back</button>
+
+  <!-- Page indicator -->
+  <div id="updatesPageIndicator" style="
+    text-align:center;
+    color:#8e9297;
+    font-size:13px;
+    user-select:none;
+  ">
+    Page 1 of 4
+  </div>
+
+  <!-- Next / Done -->
+  <button id="updatesNextBtn" style="
+    background:#5865f2;
+    color:white;
+    border:none;
+    padding:10px 18px;
+    border-radius:8px;
+    cursor:pointer;
+    font-weight:600;
+  ">Next</button>
+</div>
+  </div>
+</div>
+
+<!-- Poll Creator UI -->
+<div id="pollCreatorOverlay" style="
+  display:none;
+  position:fixed; inset:0;
+  background:rgba(0,0,0,0.55);
+  align-items:center; justify-content:center;
+  z-index:9500;
+">
+  <div style="
+    width:420px; 
+    background:#2f3136;
+    padding:20px;
+    border-radius:12px;
+  ">
+    <h2 style="color:white; margin-top:0;">Create Poll</h2>
+
+    <h3 style="color:white;">Question</h3>
+    <input id="pollQuestion" style="
+      width:95%; padding:10px; border:none;
+      background:#202225; color:white;
+      border-radius:6px; margin-bottom:15px;
+      border: 1px solid rgb(60, 60, 60);
+    " placeholder="Enter your poll question...">
+
+    <h3 style="color:white; margin:0;">Answers</h3>
+    <div id="pollOptions"></div>
+
+    <button id="addPollOption" style="
+      background:#252424; border:none; color:white;
+      padding:8px; width:50%; border-radius:6px;
+      cursor:pointer; margin-top:10px; position:relative;
+      left:50%; border: 1px solid #3c3c3c;
+    ">+ Add Another Answer</button>
+
+    <button id="applyPoll" style="
+      background:#5865f2; color:white; border:none;
+      width:100%; padding:10px; border-radius:8px;
+      margin-top:20px; font-weight:600; cursor:pointer;
+    ">Post</button>
+
+    <button id="cancelPollCreator" style="
+      background:#444; color:white; border:none;
+      width:100%; padding:8px; border-radius:6px;
+      margin-top:10px; cursor:pointer;
+    ">Cancel</button>
+  </div>
+</div>
+
+<!-- Image Lightbox -->
+<div id="imageLightbox" style="
+  display:none;
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,0.75);
+  align-items:center;
+  justify-content:center;
+  z-index:15000;
+">
+  <img id="lightboxImg" style="
+    max-width:90%;
+    max-height:90%;
+    border-radius:10px;
+    box-shadow:0 10px 40px rgba(0,0,0,0.8);
+  ">
+</div>
+
+  <script type="module">
+    // ─── IMAGE LIGHTBOX ───
+const imageLightbox = document.getElementById("imageLightbox");
+const lightboxImg = document.getElementById("lightboxImg");
+
+// Open when clicking any embedded image
+document.addEventListener("click", (e) => {
+  if (e.target.classList.contains("msg-embed-img")) {
+    lightboxImg.src = e.target.src;
+    imageLightbox.style.display = "flex";
+  }
+});
+
+// Close when clicking outside the image
+imageLightbox.addEventListener("click", (e) => {
+  if (e.target === imageLightbox) {
+    imageLightbox.style.display = "none";
+    lightboxImg.src = "";
+  }
+});
+    // -----------------------
+    // Firebase imports
+    // -----------------------
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
+import {
+  getAuth,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+  updateProfile,
+  setPersistence,
+  inMemoryPersistence,
+  browserLocalPersistence
+} from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
+
+    import {
+      getFirestore,
+      collection,
+      addDoc,
+      doc,
+      deleteDoc,
+      getDoc,
+      setDoc,
+      onSnapshot,
+      query,
+      orderBy,
+      serverTimestamp
+    } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
+    import {
+      getDatabase,
+      ref,
+      set,
+      onDisconnect,
+      onValue
+    } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
+    import { getDocs } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
+
+    // -----------------------
+    // Firebase config (kept)
+    // -----------------------
+    // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyBaf0DfwisDIQKAB342U3Sz4XAwjxfgzUA",
+  authDomain: "test-eafb0.firebaseapp.com",
+  projectId: "test-eafb0",
+  storageBucket: "test-eafb0.firebasestorage.app",
+  messagingSenderId: "731512122282",
+  appId: "1:731512122282:web:df697fc09823ad2ec2d9d3",
+  measurementId: "G-3NKQX1EN76"
+};
+
+    // -----------------------
+    // Init
+    // -----------------------
+const AUTO_LOGIN_KEY = "zenchat_auto_login";
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+const autoLoginEnabled =
+  localStorage.getItem(AUTO_LOGIN_KEY) === "true";
+
+await setPersistence(
+  auth,
+  autoLoginEnabled
+    ? browserLocalPersistence
+    : inMemoryPersistence
+);
+    const db = getFirestore(app);
+    const rtdb = getDatabase(app);
+function renderUser(userData, container, isOffline = false) {
+  const div = document.createElement("div");
+  div.className = "userItem" + (isOffline ? " offline" : "");
+
+  const img = document.createElement("img");
+  img.className = "userAvatar";
+  img.src = userData.pfp || DEFAULT_PFP;
+
+  const name = document.createElement("span");
+  name.textContent = userData.username || "Unknown";
+
+  div.appendChild(img);
+  div.appendChild(name);
+  container.appendChild(div);
+}
+
+onSnapshot(collection(db, "users"), (snap) => {
+  userListDiv.innerHTML = "";
+  offlineList.innerHTML = "";
+
+  snap.forEach(docSnap => {
+    const user = docSnap.data();
+    if (!user.username) return;
+
+    if (user.online) {
+      renderUser(user, userListDiv);
+    } else {
+      renderUser(user, offlineList, true);
+    }
+  });
+});
+
+// reference
+  const popupRef = doc(db, "popup", "control");
+  const popup = document.getElementById("popup");
+
+  // create empty popup doc if it doesn't exist
+  onSnapshot(popupRef, async (snap) => {
+    if (!snap.exists()) {
+      await setDoc(popupRef, { active: false, message: "" });
+      return;
+    }
+
+    const data = snap.data();
+    const show = data.active === true;
+    const message = data.message || "";
+
+    if (show) {
+      popup.textContent = message;
+      popup.classList.add("show");
+
+      setTimeout(() => {
+        popup.classList.remove("show");
+      }, 10000);
+    }
+  });
+
+  // ─────────────────────────────
+// Updates / Onboarding UI logic
+// ─────────────────────────────
+
+const updatesOverlay = document.getElementById("updatesOverlay");
+const updatesContent = document.getElementById("updatesContent");
+const updatesPageIndicator = document.getElementById("updatesPageIndicator");
+const updatesBackBtn = document.getElementById("updatesBackBtn");
+const updatesNextBtn = document.getElementById("updatesNextBtn");
+
+// Update pages (edit these anytime)
+const updatePages = [
+  `
+  <strong>👋 Welcome to Zen Chat!</strong><br><br>
+  This quick guide will show you what’s new and how to get started.
+  `,
+  `
+  <strong>💬 Channels & Categories</strong><br><br>
+  Channels are grouped into categories.  
+  Some channels may be locked 🔒 and only admins can speak.
+  `,
+  `
+  <strong>😊 Reactions & Mentions</strong><br><br>
+  You can react with emojis and mention users using <code>@username</code>.
+  `,
+  `
+  <strong>⚙️ Settings & Profile</strong><br><br>
+  Change your profile picture, enable auto-login, and manage preferences.
+  `,
+  `
+  <strong>Update: 1.4.7 Beta</strong><br><br>
+   * fixed the ui for messages<br>
+  `,
+  `
+  <strong>What Is Comming Soon?</strong><br><br>
+   * good looking reply system<br>
+   * a working time-out system for admins<br>
+  `
+];
+
+let currentUpdatePage = 0;
+
+function renderUpdatePage() {
+  updatesContent.innerHTML = updatePages[currentUpdatePage];
+  updatesPageIndicator.textContent =
+    `Page ${currentUpdatePage + 1} of ${updatePages.length}`;
+
+  // Back button behavior
+  updatesBackBtn.style.visibility =
+    currentUpdatePage === 0 ? "hidden" : "visible";
+
+  // Next / Done behavior
+  if (currentUpdatePage === updatePages.length - 1) {
+    updatesNextBtn.textContent = "Done";
+  } else {
+    updatesNextBtn.textContent = "Next";
+  }
+}
+
+updatesBackBtn.addEventListener("click", () => {
+  if (currentUpdatePage > 0) {
+    currentUpdatePage--;
+    renderUpdatePage();
+  }
+});
+
+updatesNextBtn.addEventListener("click", () => {
+  if (currentUpdatePage < updatePages.length - 1) {
+    currentUpdatePage++;
+    renderUpdatePage();
+  } else {
+    // Done
+    updatesOverlay.style.display = "none";
+    document.body.classList.remove("dimmed");
+    updatesOverlay.style.display = "none";
+  }
+});
+
+// Show UI
+function showUpdatesUI() {
+  currentUpdatePage = 0;
+  renderUpdatePage();
+  updatesOverlay.style.display = "flex";
+}
+
+    // -----------------------
+    // State & DOM
+    // -----------------------
+    let currentCategoryId = null;
+    let currentChannelId = null;
+    let messagesUnsub = null;
+    let categoriesUnsub = null;
+    let channelsUnsubs = [];
+
+    // cooldown state (per-client)
+    let isCoolingDown = false;
+    const COOLDOWN_MS = 2000; // 2 seconds
+
+    // cached current user doc (users/{uid})
+    let currentUserDoc = null;
+    let currentChannelDoc = null; // cached channel doc when active
+
+    // default pfp
+    const DEFAULT_PFP = "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2c/Default_pfp.svg/2048px-Default_pfp.svg.png";
+
+    const channelsWrap = document.getElementById("channelsWrap");
+    const addEntityBtn = document.getElementById("addEntityBtn");
+    const createPopupOverlay = document.getElementById("createPopupOverlay");
+    const createMain = document.getElementById("createMain");
+    const createCategoryForm = document.getElementById("createCategoryForm");
+    const createChannelForm = document.getElementById("createChannelForm");
+    const openCreateCategory = document.getElementById("openCreateCategory");
+    const openCreateChannel = document.getElementById("openCreateChannel");
+    const cancelCreate = document.getElementById("cancelCreate");
+    const backFromCategory = document.getElementById("backFromCategory");
+    const backFromChannel = document.getElementById("backFromChannel");
+    const createCategoryBtn = document.getElementById("createCategoryBtn");
+    const createChannelBtn = document.getElementById("createChannelBtn");
+    const newCategoryName = document.getElementById("newCategoryName");
+    const newCategoryDesc = document.getElementById("newCategoryDesc");
+    const categorySelect = document.getElementById("categorySelect");
+    const newChannelName = document.getElementById("newChannelName");
+    const newChannelChattable = document.getElementById("newChannelChattable");
+
+    const chatDiv = document.getElementById("chat");
+    const messageInput = document.getElementById("messageInput");
+    const sendBtn = document.getElementById("sendBtn");
+
+    const userListDiv = document.getElementById("userList");
+
+    const settingsOverlay = document.getElementById("settingsOverlay");
+const autoLoginToggle = document.getElementById("autoLoginToggle");
+
+autoLoginToggle.checked =
+  localStorage.getItem(AUTO_LOGIN_KEY) === "true";
+
+autoLoginToggle.addEventListener("change", async () => {
+  const enabled = autoLoginToggle.checked;
+
+  localStorage.setItem(AUTO_LOGIN_KEY, enabled);
+
+  await setPersistence(
+    auth,
+    enabled
+      ? browserLocalPersistence
+      : inMemoryPersistence
+  );
+
+  alert(
+    enabled
+      ? "Automatic login enabled"
+      : "Automatic login disabled"
+  );
+});
+    const settingsClose = document.getElementById("settingsClose");
+    const signUpBtn = document.getElementById("signUpBtn");
+    const loginBtn = document.getElementById("loginBtn");
+    const logoutBtn = document.getElementById("logoutBtn");
+const settingsLogoutBtn =
+  document.getElementById("settingsLogoutBtn");
+
+settingsLogoutBtn.addEventListener("click", async () => {
+  if (!auth.currentUser) return;
+
+  // Set offline
+  await setDoc(
+    doc(db, "users", auth.currentUser.uid),
+    { online: false },
+    { merge: true }
+  );
+
+  await signOut(auth);
+
+  // Reset UI
+  settingsOverlay.style.display = "none";
+  authOverlay.style.display = "flex";
+
+  chatDiv.innerHTML = "";
+  messageInput.disabled = true;
+  sendBtn.disabled = true;
+});
+
+    const updateProfileBtn = document.getElementById("updateProfileBtn");
+updateProfileBtn.addEventListener("click", async () => {
+  if (!auth.currentUser) return;
+
+  const pfp = pfpField.value.trim() || DEFAULT_PFP;
+
+  await setDoc(
+    doc(db, "users", auth.currentUser.uid),
+    { pfp },
+    { merge: true }
+  );
+
+  alert("Profile picture updated!");
+});
+
+    const usernameField = document.getElementById("usernameField");
+    const passwordField = document.getElementById("passwordField");
+    const pfpField = document.getElementById("pfpField");
+
+    // Auth modal
+    const authOverlay = document.getElementById("authOverlay");
+    const authTitle = document.getElementById("authTitle");
+    const authUsername = document.getElementById("authUsername");
+    const authPassword = document.getElementById("authPassword");
+    const authPfp = document.getElementById("authPfp");
+    const authActionBtn = document.getElementById("authActionBtn");
+    const authSwitch = document.getElementById("authSwitch");
+    const toggleAuth = document.getElementById("toggleAuth");
+
+    // overlay elements
+    const cooldownBanner = document.getElementById("cooldownBanner");
+    const timeoutBanner = document.getElementById("timeoutBanner");
+    const overlayContainer = document.getElementById("overlayContainer");
+    const overlayBox = document.getElementById("overlayBox");
+
+    // create popup clickouts
+    createPopupOverlay.addEventListener("click", (e) => { if (e.target === createPopupOverlay) createPopupOverlay.style.display = "none"; });
+    settingsOverlay.addEventListener("click", (e) => { if (e.target === settingsOverlay) settingsOverlay.style.display = "none"; });
+
+    // Admin email fallback (still allowed to manage categories/channels)
+    const ADMIN_EMAIL = "uewiuewiewu";
+function canManageChannels() {
+  return (
+    auth.currentUser &&
+    (
+      auth.currentUser.email === ADMIN_EMAIL ||
+      (currentUserDoc && currentUserDoc.HYHYHY === true)
+    )
+  );
+}
+
+    // --- Popup behavior ---
+    addEntityBtn.addEventListener("click", () => {
+      createMain.style.display = "block";
+      createCategoryForm.style.display = "none";
+      createChannelForm.style.display = "none";
+      newCategoryName.value = "";
+      newChannelName.value = "";
+      createPopupOverlay.style.display = "flex";
+    });
+    cancelCreate.addEventListener("click", () => createPopupOverlay.style.display = "none");
+    openCreateCategory.addEventListener("click", () => {
+      createMain.style.display = "none";
+      createCategoryForm.style.display = "block";
+      createChannelForm.style.display = "none";
+    });
+    openCreateChannel.addEventListener("click", async () => {
+      const cats = await getCategoriesOnce();
+      if (cats.length === 0) {
+        alert("You must create a category first!");
+        return;
+      }
+      categorySelect.innerHTML = "";
+      cats.forEach(c => {
+        const opt = document.createElement("option"); opt.value = c.id; opt.textContent = c.name;
+        categorySelect.appendChild(opt);
+      });
+      createMain.style.display = "none";
+      createChannelForm.style.display = "block";
+      createCategoryForm.style.display = "none";
+    });
+    backFromCategory.addEventListener("click", () => { createMain.style.display = "block"; createCategoryForm.style.display = "none"; });
+    backFromChannel.addEventListener("click", () => { createMain.style.display = "block"; createChannelForm.style.display = "none"; });
+
+async function openUserProfile(uid) {
+
+document.getElementById("messageUserBtn").addEventListener("click", () => {
+    document.getElementById("userProfileOverlay").style.display = "none";
+    window.location.href = "dm.html?user=" + profileViewingUID;
+});
+
+  const overlay = document.getElementById("userProfileOverlay");
+  const pfpEl = document.getElementById("profilePfp");
+  const nameEl = document.getElementById("profileUsername");
+
+  // Fetch Firestore user doc
+  try {
+    const snap = await getDoc(doc(db, "users", uid));
+    if (!snap.exists()) return;
+
+    const data = snap.data();
+
+    pfpEl.src = data.pfp || DEFAULT_PFP;
+    nameEl.textContent = data.username || "Unknown User";
+
+    overlay.style.display = "flex";
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+// Close button
+document.getElementById("closeUserProfile").addEventListener("click", () => {
+  document.getElementById("userProfileOverlay").style.display = "none";
+});
+
+// Click outside box to close
+document.getElementById("userProfileOverlay").addEventListener("click", (e) => {
+  if (e.target.id === "userProfileOverlay") {
+    e.target.style.display = "none";
+  }
+});
+
+
+    // Helper: get categories once (for channel create)
+    async function getCategoriesOnce(){
+      return new Promise((resolve) => {
+        const q = query(collection(db,"categories"), orderBy("name"));
+        const unsub = onSnapshot(q, snap => {
+          const arr = [];
+          snap.forEach(docSnap => arr.push({ id: docSnap.id, ...docSnap.data() }));
+          unsub();
+          resolve(arr);
+        }, (err) => { console.error(err); resolve([]); });
+      });
+    }
+
+    // Create category (admin only)
+    createCategoryBtn.addEventListener("click", async () => {
+      const name = (newCategoryName.value || "").trim();
+      if (!name) return alert("Enter a category name.");
+      const user = auth.currentUser;
+      if (!user) return alert("You must be logged in to create categories.");
+      // allow admin email or users.HYHYHY
+      if (user.email !== ADMIN_EMAIL && !(currentUserDoc && currentUserDoc.HYHYHY)) return alert("Only an admin can create categories.");
+      try {
+        await addDoc(collection(db,"categories"), {
+          name,
+          description: newCategoryDesc.value || "",
+          createdBy: user.uid,
+          createdAt: serverTimestamp()
+        });
+        createPopupOverlay.style.display = "none";
+      } catch (e) { console.error(e); alert("Failed to create category: " + e.message); }
+    });
+
+    // Create channel (admin only) - includes chattable flag
+    createChannelBtn.addEventListener("click", async () => {
+      const catId = categorySelect.value;
+      const chanName = (newChannelName.value || "").trim();
+      if (!catId) return alert("Pick a category.");
+      if (!chanName) return alert("Enter a channel name.");
+      const user = auth.currentUser;
+      if (!user) return alert("You must be logged in to create channels.");
+      if (user.email !== ADMIN_EMAIL && !(currentUserDoc && currentUserDoc.HYHYHY)) return alert("Only an admin can create channels.");
+      try {
+        await addDoc(collection(db,"categories",catId,"channels"), {
+          name: chanName,
+          chattable: newChannelChattable.value === "true",
+          createdBy: user.uid,
+          createdAt: serverTimestamp()
+        });
+        createPopupOverlay.style.display = "none";
+      } catch (e) { console.error(e); alert("Failed to create channel: " + e.message); }
+    });
+
+    // --- Load categories & channels realtime ---
+    function loadCategoriesRealtime(){
+      if (categoriesUnsub) categoriesUnsub();
+      channelsUnsubs.forEach(u=>u()); channelsUnsubs = [];
+      const catsQuery = query(collection(db,"categories"), orderBy("name"));
+      categoriesUnsub = onSnapshot(catsQuery, (snap) => {
+        channelsUnsubs.forEach(u=>u()); channelsUnsubs = [];
+        channelsWrap.innerHTML = "";
+        snap.forEach(catDoc => {
+          const catData = catDoc.data(); const catId = catDoc.id;
+          const catDiv = document.createElement("div"); catDiv.className = "category";
+          const header = document.createElement("div"); header.className = "categoryHeader";
+header.addEventListener("contextmenu", (e) => {
+  e.preventDefault();
+  if (!canManageChannels()) return;
+
+  openChannelContextMenu({
+    x: e.clientX,
+    y: e.clientY,
+    type: "category",
+    catId
+  });
+});
+
+          header.innerHTML = `<span class="muted">${catData.name}</span><span class="cat-arrow">></span>`;
+          catDiv.appendChild(header);
+          const channelsList = document.createElement("div"); channelsList.className = "channelsList";
+          catDiv.appendChild(channelsList);
+          const arrowSpan = header.querySelector(".cat-arrow");
+          header.addEventListener("click", () => {
+            const isHidden = channelsList.style.display === "none" || channelsList.style.display === "";
+            if (isHidden) { channelsList.style.display = "block"; arrowSpan.classList.add("open"); }
+            else { channelsList.style.display = "none"; arrowSpan.classList.remove("open"); }
+          });
+          channelsList.style.display = "block"; arrowSpan.classList.add("open");
+
+          const chansQuery = query(collection(db,"categories",catId,"channels"), orderBy("name"));
+          const unsubChan = onSnapshot(chansQuery, (chSnap) => {
+            channelsList.innerHTML = "";
+            chSnap.forEach(chDoc => {
+              const ch = chDoc.data(); const chId = chDoc.id;
+              const item = document.createElement("div");
+item.addEventListener("contextmenu", (e) => {
+  e.preventDefault();
+  if (!canManageChannels()) return;
+
+  openChannelContextMenu({
+    x: e.clientX,
+    y: e.clientY,
+    type: "channel",
+    catId,
+    chanId: chId
+  });
+});
+
+              item.className = "channelItem"; item.dataset.cat = catId; item.dataset.chan = chId;
+              item.textContent = "# " + ch.name;
+
+              // show lock label if not chattable
+              if (ch.chattable === false) {
+                const lock = document.createElement("span");
+                lock.className = "channel-lock";
+                lock.textContent = "🔒";
+                item.appendChild(lock);
+              }
+
+              // Unread dot logic — driven by Firestore per-user lastRead and channel.lastMessageAt
+              let latestMsgTs = 0;
+              if (ch.lastMessageAt) {
+                // lastMessageAt might be a Timestamp
+                latestMsgTs = ch.lastMessageAt.toMillis ? ch.lastMessageAt.toMillis() : ch.lastMessageAt;
+              }
+
+              // compute initial dot state using user's channelStatus
+              async function computeDotInitial() {
+                try {
+                  if (!auth.currentUser) return;
+                  const statusDoc = await getDoc(doc(db,"users",auth.currentUser.uid,"channelStatus",chId));
+                  let lastReadTs = 0;
+                  if (statusDoc.exists() && statusDoc.data().lastRead) {
+                    const lr = statusDoc.data().lastRead;
+                    lastReadTs = lr.toMillis ? lr.toMillis() : lr;
+                  }
+                  const existingDot = item.querySelector(".channel-dot");
+                  if (latestMsgTs > (lastReadTs || 0)) {
+                    if (!existingDot) {
+                      const dot = document.createElement("span");
+                      dot.className = "channel-dot";
+                      item.appendChild(dot);
+                    }
+                  } else {
+                    if (existingDot) existingDot.remove();
+                  }
+                } catch(e){ console.error(e); }
+              }
+              computeDotInitial();
+
+              // listen for channel doc changes (to get lastMessageAt updates)
+              const chanDocRef = doc(db,"categories",catId,"channels",chId);
+              const unsubChanDoc = onSnapshot(chanDocRef, (cd) => {
+                const data = cd.data() || {};
+                const lastMsg = data.lastMessageAt;
+                const latest = lastMsg ? (lastMsg.toMillis ? lastMsg.toMillis() : lastMsg) : 0;
+                // get user's lastRead
+                (async ()=>{
+                  if (!auth.currentUser) return;
+                  const statusDoc = await getDoc(doc(db,"users",auth.currentUser.uid,"channelStatus",chId));
+                  let lastReadTs = 0;
+                  if (statusDoc.exists() && statusDoc.data().lastRead) {
+                    const lr = statusDoc.data().lastRead;
+                    lastReadTs = lr.toMillis ? lr.toMillis() : lr;
+                  }
+                  const existingDot = item.querySelector(".channel-dot");
+                  if (latest > (lastReadTs || 0)) {
+                    if (!existingDot) {
+                      const dot = document.createElement("span");
+                      dot.className = "channel-dot";
+                      item.appendChild(dot);
+                    }
+                  } else {
+                    if (existingDot) existingDot.remove();
+                  }
+                })();
+              }, (err)=>console.error(err));
+              channelsUnsubs.push(unsubChanDoc);
+
+              // click handler stores the element and switches
+              item.addEventListener("click", () => {
+                switchChannel(catId, chId, ch.name);
+              });
+
+              if (currentCategoryId === catId && currentChannelId === chId) item.classList.add("active");
+              channelsList.appendChild(item);
+            });
+          }, (e)=>console.error(e));
+          channelsUnsubs.push(unsubChan);
+          channelsWrap.appendChild(catDiv);
+        });
+
+        // auto-select first channel if none selected
+        if (!currentChannelId) {
+          const firstChan = channelsWrap.querySelector(".channelItem");
+          if (firstChan) {
+            const catId = firstChan.dataset.cat, chanId = firstChan.dataset.chan;
+            const chanNameText = firstChan.textContent.replace(/^#\s*/, "");
+            switchChannel(catId, chanId, chanNameText);
+          } else {
+            // no channels available: disable input
+            messageInput.disabled = true; messageInput.placeholder = "No channels — admin can create categories/channels";
+            sendBtn.disabled = true;
+          }
+        }
+      }, (err) => { console.error("categories listener error", err); });
+    }
+
+// ─── ALL EMOJIS FOR REACTION UI ───
+const ALL_EMOJIS = [
+  "😀","😁","😂","🤣","😃","😄","😅","😆","😉","😊","😋","😎",
+"😍","😘","😗","😙","😚","🙂","🤗","🤔","😐","😑","😶",
+"🙄","😏","😣","😥","😮","🤐","😯","😪","😫","😴",
+"😌","🤓","😛","😜","😝","🤤","😒","😓","😔","😕",
+"🙃","🤑","😲","☹️","🙁","😖","😞","😟","😤","😢",
+"😭","😦","😧","😨","😩","🤯","😬","😰","😱","🥵",
+"🥶","😳","🤪","😵","🤢","🤮","🤧","😇","🥳","🥴",
+"😈","👿","🤠","🫠","🫥","🫨","🫢","🫣","🫡","🤡",
+"👍","👎","👌","✌️","🤞","🤟","🤘","🫶","👏","🙌",
+"🤝","🫱","🫲","✋","🖐️","🖖","👋","🙏","💪","🦾",
+"❤️","🧡","💛","💚","💙","💜","🖤","🤍","🤎","💔",
+"❣️","💕","💞","💓","💗","💖","💘","💝","💟",
+"🔥","💯","✨","⚡","💥","💫","💦","💨","🫧","🌈",
+"⭐","🌟","🌙","☀️","☁️","⛈️","❄️","🌊","🌍","🌎",
+"🎉","🎊","🎈","🎂","🎁","🎀","🪩","🎆","🎇","🥂",
+"🍾","🍻","🥳","🎃","🎄","🎅","🎁","🕯️",
+"🍕","🍔","🍟","🌭","🥪","🌮","🌯","🍣","🍜","🍝",
+"🍩","🍪","🍫","🍬","🍭","🍰","🧁","🍦","🍨","🍿",
+"☕","🍵","🥤","🧃","🧋","🍺","🍷","🥃","🍸",
+"🎮","🕹️","🎲","♟️","🧩","🎯","🏆","🥇","🥈","🥉",
+"⚽","🏀","🏈","⚾","🎾","🏐","🎳","🏓","🏸",
+"🎵","🎶","🎧","🎤","🎼","🎹","🥁","🎷","🎺","🎸",
+"📌","📍","📎","🧷","📏","📐","✂️","🖊️","🖋️","📝",
+"📖","📚","📓","📒","📔","🗂️","🗃️","🗄️","🗑️",
+"💻","🖥️","⌨️","🖱️","📱","📲","☎️","📞","📡","📷",
+"🎥","📹","📺","📻","🔊","🔔","🔕",
+"🧠","👀","👁️","👄","🫀","🫁","🦴","🦷","🩸",
+"🚀","✈️","🚗","🚕","🚌","🚎","🏍️","🚲","🛴","🚢",
+"🛸","🚁","🗺️","🧭",
+"🗿","💀","☠️","👻","👽","🤖","🎃","🪦","🕸️","🕷️",
+"🌱","🌿","🍀","🌸","🌼","🌻","🌹","🥀","🌲","🌳",
+"🌵","🌴","🍁","🍂","🍃",
+"🦄","🐶","🐱","🐭","🐹","🐰","🦊","🐻","🐼","🐻‍❄️",
+"🐨","🐯","🦁","🐮","🐷","🐽","🐸","🐵","🙈","🙉","🙊",
+"🐒","🦍","🦧","🐔","🐧","🐦","🐤","🐣","🐥","🦆",
+"🦅","🦉","🦇","🐺","🐗","🐴","🦄","🐝","🪲","🐞",
+"🦋","🐌","🐛","🦟","🪰","🪳","🕷️","🦂","🐢","🐍",
+"🦎","🐙","🦑","🦐","🦞","🦀","🐡","🐠","🐟","🐬",
+"🐳","🐋","🦈","🦭","🐊","🐅","🐆","🦓","🦍","🦧",
+"🐘","🦣","🦏","🦛","🐪","🐫","🦒","🦘","🦬","🐃",
+"🐂","🐄","🐎","🐖","🐏","🐑","🦙","🐐","🦌","🐕",
+"🐩","🦮","🐕‍🦺","🐈","🐈‍⬛","🪶","🐓","🦃","🦚","🦜",
+"🍎","🍏","🍐","🍊","🍋","🍌","🍉","🍇","🍓","🫐",
+"🍈","🍒","🍑","🥭","🍍","🥥","🥝","🍅","🍆","🥑",
+"🥦","🥬","🥒","🌶️","🫑","🌽","🥕","🧄","🧅","🥔",
+"🥐","🥯","🍞","🥖","🥨","🧀","🥚","🍳","🥞","🧇",
+"🥓","🥩","🍗","🍖","🌭","🍔","🍟","🍕","🥪","🥙",
+"🍱","🍘","🍙","🍚","🍛","🍜","🍝","🍠","🍢","🍣",
+"🍤","🍥","🥮","🍡","🥟","🥠","🥡","🦪","🍦","🍧",
+"🏖️","🏝️","🏜️","🏕️","⛰️","🏔️","🗻","🌋","🏞️","🏟️",
+"🏛️","🏗️","🧱","🪨","🪵","🛖","🏘️","🏚️","🏠","🏡",
+"🛏️","🛋️","🚪","🪟","🪑","🚽","🛁","🚿","🧼","🪥",
+"🧽","🪣","🧴","🛒","🎁","🪄","🧿","🪬","🪔","🕯️",
+"🧯","🛢️","⚙️","🪛","🔧","🔨","🪓","⛏️","🧲","🔩",
+"🪝","🧰","📦","🪜","🧪","🧫","🧬","🔬","🔭","📡",
+"👑","🎓","🧢","🎩","👒","👟","👞","👠","👡","🩴",
+"👢","🧦","🧤","🧣","👕","👚","👔","🧥","🥼","🦺",
+"🧳","🎒","👝","👛","👜","💼","📸","🖼️","🪞","🪟",
+"🧸","🪅","🪁","🎏","🎐","🎎","🪆","♠️","♥️","♦️","♣️",
+"🀄","🃏","🅰️","🅱️","🅾️","🅿️","🆎","🆑","🆒","🆓",
+"🆔","🆕","🆖","🆗","🆘","🆙","🆚","♈","♉","♊",
+"♋","♌","♍","♎","♏","♐","♑","♒","♓","⛎",
+"🔀","🔁","🔂","▶️","⏩","⏭️","⏯️","◀️","⏪","⏮️",
+"🔼","⏫","🔽","⏬","⏸️","⏹️","⏺️","⏏️","🎦","🔅","🔆",
+"📶","📳","📴","♀️","♂️","⚧️","✖️","➕","➖","➗",
+"♾️","‼️","⁉️","❓","❔","❕","❗","〰️","💱","💲",
+"⚕️","♻️","⚜️","🔱","📛","🔰","⭕","✅","☑️","✔️",
+"❌","❎","➰","➿","〽️","✳️","✴️","❇️","©️","®️","™️",
+"🔴","🟠","🟡","🟢","🔵","🟣","🟤","⚫","⚪","🟥",
+"🟧","🟨","🟩","🟦","🟪","🟫","⬛","⬜","◼️","◻️",
+"◾","◽","▪️","▫️","🔶","🔷","🔸","🔹","🔺","🔻",
+"🕐","🕑","🕒","🕓","🕔","🕕","🕖","🕗","🕘","🕙",
+"🕚","🕛","🕜","🕝","🕞","🕟","🕠","🕡","🕢","🕣",
+"🕤","🕥","🕦","🕧",
+"🏳️","🏴","🏁","🚩","🏳️‍🌈","🏳️‍⚧️","🏴‍☠️",
+"🇺🇸","🇨🇦","🇲🇽","🇧🇷","🇦🇷","🇨🇱","🇵🇪","🇨🇴","🇻🇪","🇬🇧",
+"🇫🇷","🇩🇪","🇮🇹","🇪🇸","🇵🇹","🇳🇱","🇧🇪","🇨🇭","🇦🇹","🇸🇪",
+"🇳🇴","🇩🇰","🇫🇮","🇮🇪","🇵🇱","🇨🇿","🇸🇰","🇭🇺","🇷🇴","🇧🇬",
+"🇬🇷","🇹🇷","🇺🇦","🇷🇺","🇮🇱","🇸🇦","🇦🇪","🇮🇷","🇮🇳","🇵🇰",
+"🇧🇩","🇱🇰","🇳🇵","🇹🇭","🇻🇳","🇲🇾","🇸🇬","🇮🇩","🇵🇭","🇨🇳",
+"🇹🇼","🇯🇵","🇰🇷","🇲🇳","🇭🇰","🇦🇺","🇳🇿","🇫🇯","🇵🇬","🇿🇦",
+"🇪🇬","🇳🇬","🇰🇪","🇪🇹","🇲🇦","🇹🇳","🇩🇿","🇬🇭","🇨🇮","🇸🇳",
+"🧑","🧒","🧓","👶","👧","👦","🧔","🧔‍♂️","🧔‍♀️","👱",
+"👱‍♂️","👱‍♀️","👨","👩","🧑‍🦱","🧑‍🦰","🧑‍🦳","🧑‍🦲",
+"👮","👮‍♂️","👮‍♀️","🕵️","🕵️‍♂️","🕵️‍♀️","💂","💂‍♂️","💂‍♀️",
+"👷","👷‍♂️","👷‍♀️","🤴","👸","👳","👳‍♂️","👳‍♀️",
+"👲","🧕","🤵","🤵‍♂️","🤵‍♀️","👰","👰‍♂️","👰‍♀️",
+"🧑‍⚕️","👨‍⚕️","👩‍⚕️","🧑‍🎓","👨‍🎓","👩‍🎓",
+"🧑‍🏫","👨‍🏫","👩‍🏫","🧑‍⚖️","👨‍⚖️","👩‍⚖️",
+"🧑‍🌾","👨‍🌾","👩‍🌾","🧑‍🍳","👨‍🍳","👩‍🍳",
+"🧑‍🔧","👨‍🔧","👩‍🔧","🧑‍🏭","👨‍🏭","👩‍🏭",
+"🧑‍💻","👨‍💻","👩‍💻","🧑‍🎤","👨‍🎤","👩‍🎤",
+"🧑‍🎨","👨‍🎨","👩‍🎨","🧑‍✈️","👨‍✈️","👩‍✈️",
+"🧑‍🚀","👨‍🚀","👩‍🚀","🧑‍🚒","👨‍🚒","👩‍🚒",
+"🧑‍🤝‍🧑","👭","👫","👬","💏","👩‍❤️‍💋‍👩","👨‍❤️‍💋‍👨",
+"💑","👩‍❤️‍👩","👨‍❤️‍👨","👪","👨‍👩‍👦","👨‍👩‍👧",
+"👨‍👩‍👧‍👦","👨‍👩‍👦‍👦","👨‍👩‍👧‍👧","👩‍👩‍👦",
+"👩‍👩‍👧","👩‍👩‍👧‍👦","👩‍👩‍👦‍👦","👩‍👩‍👧‍👧",
+"👨‍👨‍👦","👨‍👨‍👧","👨‍👨‍👧‍👦","👨‍👨‍👦‍👦",
+"👨‍👨‍👧‍👧","👩‍👦","👩‍👧","👩‍👧‍👦","👩‍👦‍👦",
+"👩‍👧‍👧","👨‍👦","👨‍👧","👨‍👧‍👦","👨‍👦‍👦",
+"👨‍👧‍👧",
+"🧍","🧍‍♂️","🧍‍♀️","🧎","🧎‍♂️","🧎‍♀️","🧑‍🦯",
+"👨‍🦯","👩‍🦯","🧑‍🦼","👨‍🦼","👩‍🦼",
+"🧑‍🦽","👨‍🦽","👩‍🦽","🏃","🏃‍♂️","🏃‍♀️",
+"🚶","🚶‍♂️","🚶‍♀️","💃","🕺","🕴️",
+"🧗","🧗‍♂️","🧗‍♀️","🏇","🏂","🏌️","🏌️‍♂️","🏌️‍♀️",
+"🏄","🏄‍♂️","🏄‍♀️","🚣","🚣‍♂️","🚣‍♀️",
+"🏊","🏊‍♂️","🏊‍♀️","⛹️","⛹️‍♂️","⛹️‍♀️",
+"🏋️","🏋️‍♂️","🏋️‍♀️","🚴","🚴‍♂️","🚴‍♀️",
+"🚵","🚵‍♂️","🚵‍♀️","🤸","🤸‍♂️","🤸‍♀️",
+"🤼","🤼‍♂️","🤼‍♀️","🤽","🤽‍♂️","🤽‍♀️",
+"🤾","🤾‍♂️","🤾‍♀️","🤹","🤹‍♂️","🤹‍♀️",
+"🧘","🧘‍♂️","🧘‍♀️","🛀","🛌",
+"🧑‍🎄","👨‍🎄","🤶","🦸","🦸‍♂️","🦸‍♀️",
+"🦹","🦹‍♂️","🦹‍♀️","🧙","🧙‍♂️","🧙‍♀️",
+"🧚","🧚‍♂️","🧚‍♀️","🧛","🧛‍♂️","🧛‍♀️",
+"🧜","🧜‍♂️","🧜‍♀️","🧝","🧝‍♂️","🧝‍♀️",
+"🧞","🧞‍♂️","🧞‍♀️","🧟","🧟‍♂️","🧟‍♀️",
+"👣","🫦","🫧","🫨","🫠","🫥","🫢","🫣","🫡",
+"🪐","🛞","🛟","🪫","🪪","🪬","🪩","🪭","🪮",
+"🪯","🪰","🪱","🪲","🪳","🪴","🪵","🪶",
+"🪷","🪸","🪹","🪺",
+"♨️","⚓","⚔️","🛡️","⚖️","🪓","🪚","🪤",
+"🪣","🪥","🪦","🪧","🪪",
+"🧿","🔮","🪄","🎴","🎭","🩰","🎻","🪕",
+"🪘","🎬","🪗",
+"🩱","🩲","🩳","🩴","🩵","🩶","🩷","🩸",
+"🩹","🩺","🩻",
+"🪙","💸","🧾","🪝","🪜","🪞","🪟","🪠",
+"🛜","🛝","🛖","🛕","🛗","🛻","🛼","🛵",
+"🛴","🛹","🛶","🛟",
+"🧭","🗺️","🧳","🛍️","🧯","🧰","🧲",
+"🧪","🧫","🧬","🧮",
+"♟️","🀄","🎴","🃏","🕹️","🧩",
+"🕉️","☸️","✡️","☪️","🕎","☯️","✝️","♾️"
+
+];
+
+const reactionInputBtn = document.getElementById("reactionInputBtn");
+
+reactionInputBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+
+  // Remove existing pickers
+  document.querySelectorAll(".reaction-ui").forEach(r => r.remove());
+
+  const picker = document.createElement("div");
+  picker.className = "reaction-ui";
+
+  ALL_EMOJIS.forEach(emoji => {
+    const btn = document.createElement("button");
+    btn.textContent = emoji;
+
+    btn.onclick = () => {
+      messageInput.value += emoji;
+      messageInput.focus();
+      picker.remove();
+    };
+
+    picker.appendChild(btn);
+  });
+
+  document.getElementById("input").appendChild(picker);
+
+// ─── HIDE OFF-SCREEN EMOJIS (PERFORMANCE) ───
+let rafPending = false;
+
+function updateVisibleEmojis() {
+  if (rafPending) return;
+  rafPending = true;
+
+  requestAnimationFrame(() => {
+    rafPending = false;
+
+    const pickerRect = picker.getBoundingClientRect();
+
+    picker.querySelectorAll("button").forEach(btn => {
+      const r = btn.getBoundingClientRect();
+
+      // If emoji is far outside view, hide it
+      if (r.bottom < pickerRect.top - 40 || r.top > pickerRect.bottom + 40) {
+        btn.style.visibility = "hidden";
+      } else {
+        btn.style.visibility = "visible";
+      }
+    });
+  });
+}
+
+// Run once on open
+updateVisibleEmojis();
+
+// Update on scroll
+picker.addEventListener("scroll", updateVisibleEmojis);
+
+  // Position ABOVE input bar
+  picker.style.bottom = "70px";
+  picker.style.right = "90px";
+
+  document.addEventListener("click", () => picker.remove(), { once: true });
+});
+
+    // Helper: sanitize text for insertion as text node (basic)
+    function escapeHtml(s){
+      if (typeof s !== "string") return s;
+      return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    }
+
+// Cache: username → uid
+const usernameToUid = {};
+
+async function loadUsernameMap() {
+    if (Object.keys(usernameToUid).length) return;
+    const snap = await getDocs(collection(db, "users"));
+    snap.forEach(doc => {
+        const data = doc.data();
+        if (data && data.username) usernameToUid[data.username] = doc.id;
+    });
+}
+
+// Turn @username into <span class="mention">@username</span>
+function createMessageNodesWithMentions(rawText) {
+    const frag = document.createDocumentFragment();
+    const mentionRe = /@([a-zA-Z0-9_\-]+)/g;
+
+    let last = 0;
+    let match;
+
+    while ((match = mentionRe.exec(rawText)) !== null) {
+        const before = rawText.slice(last, match.index);
+        if (before) frag.appendChild(document.createTextNode(before));
+
+        const user = match[1];
+        const span = document.createElement("span");
+        span.className = "mention";
+        span.textContent = "@" + user;
+        span.dataset.username = user;
+
+        span.addEventListener("click", async () => {
+            await loadUsernameMap();
+            const uid = usernameToUid[user];
+            if (uid) openUserProfile(uid);
+            else alert("User not found: @" + user);
+        });
+
+        frag.appendChild(span);
+        last = mentionRe.lastIndex;
+    }
+
+    const tail = rawText.slice(last);
+    if (tail) frag.appendChild(document.createTextNode(tail));
+
+    return frag;
+}
+
+    // Helper: fetch users/{uid} doc (returns data or null)
+    async function fetchUserDoc(uid) {
+      try {
+        const d = await getDoc(doc(db,"users",uid));
+        return d.exists() ? { id: d.id, ...d.data() } : null;
+      } catch (e) { console.error("fetchUserDoc error", e); return null; }
+    }
+
+    // Helper: fetch channel doc (categories/{cat}/channels/{chan})
+    async function fetchChannelDoc(catId, chanId) {
+      try {
+        const d = await getDoc(doc(db,"categories",catId,"channels",chanId));
+        return d.exists() ? { id: d.id, ...d.data() } : null;
+      } catch (e) { console.error("fetchChannelDoc error", e); return null; }
+    }
+
+    let timeoutInterval = null; // interval ID for countdown
+
+    // Show overlay with message (read-only or timeout or cooldown)
+    function showOverlay(text) {
+      overlayBox.textContent = text;
+      overlayContainer.style.display = "flex";
+    }
+
+    // Animate overlay out and hide
+    function hideOverlayAnimated() {
+      overlayBox.classList.add("fadeOut");
+      setTimeout(()=>{
+        overlayBox.classList.remove("fadeOut");
+        overlayContainer.style.display = "none";
+        overlayBox.textContent = "";
+      }, 600);
+    }
+
+    // Switch channel & subscribe messages
+    async function switchChannel(catId, chanId, chanName){
+      if (messagesUnsub) messagesUnsub();
+      currentCategoryId = catId; currentChannelId = chanId;
+      // fetch and cache channel doc
+      currentChannelDoc = await fetchChannelDoc(catId, chanId);
+
+      // clear any overlay & timers
+      if (timeoutInterval) { clearInterval(timeoutInterval); timeoutInterval = null; }
+      overlayContainer.style.display = "none";
+      cooldownBanner.style.display = "none";
+      timeoutBanner.style.display = "none";
+
+      // UI state
+      messageInput.placeholder = `Message #${chanName}`;
+      document.querySelectorAll(".channelItem").forEach(el => el.classList.toggle("active", el.dataset.cat === catId && el.dataset.chan === chanId));
+      // by default enable input; we'll adjust based on locked/timeout
+      messageInput.disabled = false; sendBtn.disabled = false;
+
+      // check chattable: if chattable false and user is not admin -> disable input and show overlay
+      const chattable = !(currentChannelDoc && currentChannelDoc.chattable === false);
+      if (!chattable) {
+        let canSpeak = false;
+        if (auth.currentUser) {
+          // admin email OR users/{uid}.HYHYHY true
+          const userEmailIsAdmin = auth.currentUser.email === ADMIN_EMAIL;
+          const userIsAdminField = (currentUserDoc && currentUserDoc.HYHYHY) === true;
+          canSpeak = userEmailIsAdmin || userIsAdminField;
+        }
+        if (!canSpeak) {
+          messageInput.disabled = true; sendBtn.disabled = true;
+          showOverlay("🔒 This channel is locked — only admins can speak");
+        }
+      }
+
+      // check timeout & cooldown for current user
+      if (auth.currentUser) {
+        currentUserDoc = await fetchUserDoc(auth.currentUser.uid) || {};
+        const timeoutUntil = currentUserDoc.timeoutUntil || 0;
+        const cooldownUntil = currentUserDoc.cooldownUntil || 0;
+        const now = Date.now();
+        if (timeoutUntil > now) {
+          // show timeout overlay with live countdown
+          updateTimeoutOverlay(timeoutUntil);
+        } else if (cooldownUntil > now) {
+          // if user was put on cooldown by admin, enforce overlay & disable input until cooldown ends
+          updateCooldownOverlay(cooldownUntil);
+        } else {
+          // if chattable allow input
+          if (chattable) { messageInput.disabled = false; sendBtn.disabled = false; overlayContainer.style.display = "none"; }
+          else {
+            // chattable false: only admins can speak
+            if (auth.currentUser) {
+              const userEmailIsAdmin = auth.currentUser.email === ADMIN_EMAIL;
+              const userIsAdminField = (currentUserDoc && currentUserDoc.HYHYHY) === true;
+              if (userEmailIsAdmin || userIsAdminField) { messageInput.disabled = false; sendBtn.disabled = false; overlayContainer.style.display = "none"; }
+            }
+          }
+        }
+      } else {
+        // not logged in: disable input
+        messageInput.disabled = true; sendBtn.disabled = true;
+      }
+
+      // update user's lastRead in Firestore (server timestamp) so dots persist after refresh
+      if (auth.currentUser) {
+        try {
+          await setDoc(doc(db,"users",auth.currentUser.uid,"channelStatus",chanId), { lastRead: serverTimestamp() }, { merge: true });
+        } catch (e) { console.error("failed to update lastRead", e); }
+      }
+
+      const msgsQuery = query(collection(db,"categories",catId,"channels",chanId,"messages"), orderBy("createdAt"));
+      messagesUnsub = onSnapshot(msgsQuery, (snap) => {
+        chatDiv.innerHTML = "";
+
+        snap.forEach(docSnap => {
+          const msg = docSnap.data();
+          let messageText = msg.text || "";
+// Detect polls formatted like:
+// /createpoll {((question)), [opt1], [opt2], ...}
+const pollRegex = /^\/createpoll\s*\{\(\((.+?)\)\),\s*(.+)\}$/i;
+const pollMatch = messageText.match(pollRegex);
+
+let pollData = null;
+
+if (pollMatch) {
+    const question = pollMatch[1].trim();
+    const optionsRaw = pollMatch[2];
+
+    const optionRegex = /\[([^\]]+)\]/g;
+    let match;
+    const options = [];
+
+    while ((match = optionRegex.exec(optionsRaw)) !== null) {
+        options.push(match[1]);
+    }
+
+    pollData = { question, options };
+}
+
+// APPLY PROFANITY FILTER ON DISPLAY
+if (profanityFilterEnabled) {
+  const badWords = ["fuck", "shit", "bitch", "asshole", "bastard", "dick"];
+  badWords.forEach(word => {
+    const regex = new RegExp(word, "gi");
+    messageText = messageText.replace(regex, (match) => "#".repeat(match.length));
+  });
+}
+
+          // --- IMAGE HANDLING: find image URLs and remove the raw link from displayed text (but keep mixed text) ---
+          // imageRegex global to find all image urls in the message
+          const imgRegexGlobal = /https?:\/\/\S+\.(?:png|jpe?g|gif|webp)(?:\?\S*)?/ig;
+          const foundImgs = [];
+          let match;
+          while ((match = imgRegexGlobal.exec(messageText)) !== null) {
+            foundImgs.push(match[0]);
+          }
+          // Create base elements
+const wrapper = document.createElement("div"); wrapper.className = "message";
+const avatar = document.createElement("img"); avatar.className = "avatar"; avatar.src = msg.pfp || DEFAULT_PFP; avatar.alt = "avatar";
+wrapper.appendChild(avatar);
+const content = document.createElement("div"); content.className = "message-content";
+const header = document.createElement("div"); header.className = "message-header";
+const timeText = (msg.createdAt && msg.createdAt.toDate) ? `${new Date(msg.createdAt.toDate()).toLocaleTimeString()} ${new Date(msg.createdAt.toDate()).toLocaleDateString()}` : "";
+header.innerHTML = `<span>${escapeHtml(msg.user || msg.displayName || "Unknown")}</span><small>${escapeHtml(timeText)}</small>`;
+
+          // Remove the found image URLs from the message text for display, preserving surrounding whitespace
+          let displayText = messageText;
+          if (foundImgs.length > 0) {
+            foundImgs.forEach(url => {
+              // remove the exact URL from the message (all occurrences) but keep surrounding text
+              const escapedUrl = url.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+              const urlRegex = new RegExp(escapedUrl, 'g');
+              displayText = displayText.replace(urlRegex, '').trim();
+            });
+          }
+
+          const text = document.createElement("div"); text.className = "message-text";
+          if (pollData) {
+    const container = document.createElement("div");
+const optionBars = [];
+const optionLabels = [];
+    container.style.background = "#2f3136";
+    container.style.padding = "12px";
+    container.style.borderRadius = "10px";
+    container.style.display = "flex";
+    container.style.flexDirection = "column";
+    container.style.gap = "10px";
+    container.style.marginTop = "6px";
+
+    // Poll question
+    const q = document.createElement("div");
+    q.style.color = "white";
+    q.style.fontSize = "16px";
+    q.style.fontWeight = "700";
+    q.textContent = pollData.question;
+    container.appendChild(q);
+
+    // User's vote stored in element instance
+    let selected = null;
+
+    // Answer list
+    const optList = document.createElement("div");
+    optList.style.display = "flex";
+    optList.style.flexDirection = "column";
+    optList.style.gap = "8px";
+
+    pollData.options.forEach((optText, index) => {
+        const opt = document.createElement("div");
+        opt.style.display = "flex";
+        opt.style.alignItems = "center";
+        opt.style.gap = "8px";
+        opt.style.padding = "8px 10px";
+        opt.style.borderRadius = "6px";
+        opt.style.background = "#3a3c43";
+        opt.style.color = "white";
+        opt.style.cursor = "pointer";
+
+        const circle = document.createElement("div");
+        circle.style.width = "18px";
+        circle.style.height = "14px";
+        circle.style.borderRadius = "50%";
+        circle.style.border = "2px solid #bbb";
+        circle.style.display = "flex";
+        circle.style.alignItems = "center";
+        circle.style.justifyContent = "center";
+        circle.style.color = "white";
+        circle.style.fontSize = "12px";
+
+        const label = document.createElement("div");
+        label.textContent = optText;
+
+        opt.onclick = () => {
+            // reset all first
+            [...optList.children].forEach(c => {
+                c.style.background = "#3a3c43";
+                c.querySelector(".circle").textContent = "";
+                c.querySelector(".circle").style.borderColor = "#bbb";
+            });
+
+            selected = index;
+            opt.style.background = "#5d5e6c";
+            circle.textContent = "✔";
+            circle.style.borderColor = "white";
+        };
+
+        circle.classList.add("circle");
+
+        opt.appendChild(circle);
+        opt.appendChild(label);
+        optList.appendChild(opt);
+
+// percentage bar
+const barWrapper = document.createElement("div");
+barWrapper.style.width = "100%";
+barWrapper.style.background = "#222";
+barWrapper.style.height = "8px";
+barWrapper.style.borderRadius = "6px";
+barWrapper.style.marginTop = "4px";
+
+const bar = document.createElement("div");
+bar.style.height = "8px";
+bar.style.borderRadius = "6px";
+bar.style.width = "0%";
+bar.style.background = "#5865f2";
+
+barWrapper.appendChild(bar);
+opt.appendChild(barWrapper);
+
+optionBars.push(bar);
+optionLabels.push(label);
+
+    });
+
+    container.appendChild(optList);
+
+    // APPLY button
+    const apply = document.createElement("button");
+    apply.textContent = "Apply!";
+    apply.style.background = "#5865f2";
+    apply.style.color = "white";
+    apply.style.border = "none";
+    apply.style.borderRadius = "6px";
+    apply.style.padding = "10px";
+    apply.style.fontWeight = "700";
+    apply.style.cursor = "pointer";
+
+apply.onclick = async () => {
+    if (selected === null) return;
+
+    const voteRef = doc(db, "polls", docSnap.id, "votes", auth.currentUser.uid);
+
+    await setDoc(voteRef, {
+        optionIndex: selected,
+        votedAt: serverTimestamp()
+    });
+
+    apply.textContent = "Saved!";
+    apply.disabled = true;
+};
+
+
+    container.appendChild(apply);
+
+const votesCollectionRef = collection(db, "polls", docSnap.id, "votes");
+
+onSnapshot(votesCollectionRef, (voteSnap) => {
+    const total = voteSnap.size;
+
+    const counts = Array(pollData.options.length).fill(0);
+
+    voteSnap.forEach(v => {
+        const choice = v.data().optionIndex;
+        if (choice !== undefined) counts[choice]++;
+    });
+
+    pollData.options.forEach((opt, index) => {
+        const count = counts[index];
+        const percent = total === 0 ? 0 : Math.round((count / total) * 100);
+
+        optionBars[index].style.width = percent + "%";
+        optionLabels[index].textContent =
+            `${opt} — ${count} votes (${percent}%)`;
+    });
+});
+
+
+    text.innerHTML = "";
+    text.appendChild(container);
+} else {
+    text.innerHTML = "";
+    text.appendChild(createMessageNodesWithMentions(displayText));
+}
+
+          // embeddings (images, drive)
+          // We already extracted image URLs into foundImgs; append image elements for each
+          if (foundImgs.length > 0) {
+            foundImgs.forEach(imgUrl => {
+              const imgEl = document.createElement("img");
+              imgEl.src = imgUrl;
+              imgEl.className = "msg-embed-img";
+              imgEl.loading = "lazy";
+              text.appendChild(imgEl);
+            });
+          }
+
+          // Drive embed detection (if present) - keep this even if mixed text
+          const driveRegex1 = /https?:\/\/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/i;
+          const driveRegex2 = /[?&]id=([a-zA-Z0-9_-]+)/i;
+          let driveMatch = messageText.match(driveRegex1);
+          let fileId = null;
+          if (driveMatch && driveMatch[1]) {
+            fileId = driveMatch[1];
+          } else {
+            driveMatch = messageText.match(driveRegex2);
+            if (driveMatch && driveMatch[1]) fileId = driveMatch[1];
+          }
+          if (fileId) {
+            const embedWrap = document.createElement("div");
+            embedWrap.style.marginTop = "8px";
+            const iframe = document.createElement("iframe");
+            iframe.src = `stuff/drive.png`;
+            iframe.width = "225";
+            iframe.height = "225";
+            iframe.style.border = "none";
+            iframe.style.borderRadius = "8px";
+            iframe.allow = "autoplay";
+            embedWrap.appendChild(iframe);
+
+            const btnWrap = document.createElement("div");
+            btnWrap.style.marginTop = "6px";
+            const a = document.createElement("a");
+            a.href = `https://drive.google.com/uc?export=download&id=${fileId}`;
+            a.target = "_blank";
+            a.rel = "noreferrer noopener";
+            a.style.display = "inline-block";
+            a.style.padding = "6px 10px";
+            a.style.background = "var(--accent)";
+            a.style.color = "#fff";
+            a.style.borderRadius = "6px";
+            a.style.textDecoration = "none";
+            a.style.fontWeight = "600";
+            a.innerText = "⬇ Download";
+            btnWrap.appendChild(a);
+            embedWrap.appendChild(btnWrap);
+
+            text.appendChild(embedWrap);
+          }
+
+          content.appendChild(header); content.appendChild(text); wrapper.appendChild(content);
+
+// ─── Message actions button (⋯) ───
+const actionsBtn = document.createElement("button");
+actionsBtn.className = "msgActionsBtn";
+actionsBtn.textContent = "⋯";
+
+wrapper.style.position = "relative";
+wrapper.appendChild(actionsBtn);
+
+actionsBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+
+  // close existing menus
+  document.querySelectorAll(".msgActionsMenu").forEach(m => m.remove());
+
+  const menu = document.createElement("div");
+  menu.className = "msgActionsMenu";
+
+  // position top-right touching button
+  menu.style.top = "-2px";
+  menu.style.right = "0";
+
+  // ── Reply ──
+  const replyBtn = document.createElement("button");
+  replyBtn.className = "msgActionItem";
+  replyBtn.textContent = "↩";
+  replyBtn.title = "Reply";
+  replyBtn.onclick = () => {
+    messageInput.value = `@${msg.user} `;
+    messageInput.focus();
+    menu.remove();
+  };
+  menu.appendChild(replyBtn);
+
+  // ── Edit (ONLY message owner) ──
+  if (auth.currentUser && msg.uid === auth.currentUser.uid) {
+    const editBtn = document.createElement("button");
+    editBtn.className = "msgActionItem";
+    editBtn.textContent = "✏️";
+    editBtn.title = "Edit";
+
+    editBtn.onclick = async () => {
+      const newText = prompt("Edit message:", msg.text);
+      if (newText && newText !== msg.text) {
+        await setDoc(
+          doc(db,"categories",currentCategoryId,"channels",currentChannelId,"messages",docSnap.id),
+          { text: newText },
+          { merge: true }
+        );
+      }
+      menu.remove();
+    };
+
+    menu.appendChild(editBtn);
+  }
+
+// ── Delete (message owner OR admin) ──
+const isOwner =
+  auth.currentUser && msg.uid === auth.currentUser.uid;
+
+const isAdmin =
+  (currentUserDoc && currentUserDoc.HYHYHY === true) ||
+  auth.currentUser?.email === ADMIN_EMAIL;
+
+if (isOwner || isAdmin) {
+  const delBtn = document.createElement("button");
+  delBtn.className = "msgActionItem danger";
+  delBtn.textContent = "🗑";
+  delBtn.title = "Delete";
+
+  delBtn.onclick = async () => {
+    if (!confirm("Delete this message?")) return;
+
+    await deleteDoc(
+      doc(
+        db,
+        "categories",
+        currentCategoryId,
+        "channels",
+        currentChannelId,
+        "messages",
+        docSnap.id
+      )
+    );
+
+    menu.remove();
+  };
+
+  menu.appendChild(delBtn);
+}
+
+  wrapper.appendChild(menu);
+
+  // close when clicking outside
+  document.addEventListener("click", () => menu.remove(), { once: true });
+});
+
+          chatDiv.appendChild(wrapper);
+        });
+        chatDiv.scrollTop = chatDiv.scrollHeight;
+      }, (e)=>console.error(e));
+    }
+
+    // When admin sets a cooldownUntil for a user (server field users/{uid}.cooldownUntil),
+    // the Cloud Function (server) should also remove messages that violate it.
+    // Client will check cooldownBeforeSend and will not allow typing while cooldown active.
+
+    // Client cooldown overlay for admin-enforced cooldownUntil
+    function updateCooldownOverlay(cooldownUntilMs) {
+      if (!cooldownUntilMs) return;
+      let intervalId = null;
+      function render() {
+        const now = Date.now();
+        const rem = Math.max(0, Math.ceil((cooldownUntilMs - now)/1000));
+        if (rem <= 0) {
+          cooldownBanner.style.display = "none";
+          clearInterval(intervalId);
+          messageInput.disabled = false;
+          sendBtn.disabled = false;
+          return;
+        }
+        cooldownBanner.textContent = `⏳ You are on cooldown (${rem}s)`;
+        cooldownBanner.style.display = "block";
+        messageInput.disabled = true;
+        sendBtn.disabled = true;
+      }
+      render();
+      intervalId = setInterval(render, 1000);
+      setTimeout(() => {
+        clearInterval(intervalId);
+        cooldownBanner.style.display = "none";
+      }, Math.max(0, cooldownUntilMs - Date.now()) + 1200);
+    }
+
+    // Cooldown result: show banner and disable typing for COOLDOWN_MS
+    function triggerLocalCooldown() {
+      isCoolingDown = true;
+      cooldownBanner.style.display = "block";
+      messageInput.disabled = true;
+      sendBtn.disabled = true;
+      // also set input.value to '' to avoid partial typing
+      messageInput.blur();
+      setTimeout(async () => {
+        isCoolingDown = false;
+        cooldownBanner.style.display = "none";
+        // only re-enable if not timed out and not in locked channel for non-admin
+        let canEnable = true;
+        if (auth.currentUser) {
+          const udoc = await fetchUserDoc(auth.currentUser.uid);
+          if (udoc && (udoc.timeoutUntil || 0) > Date.now()) canEnable = false;
+          if (udoc && (udoc.cooldownUntil || 0) > Date.now()) canEnable = false;
+        } else canEnable = false;
+        if (currentChannelDoc && currentChannelDoc.chattable === false) {
+          let HYHYHY = false;
+          if (auth.currentUser) {
+            HYHYHY = (auth.currentUser.email === ADMIN_EMAIL) || (currentUserDoc && currentUserDoc.isAdmin);
+          }
+          if (!HYHYHY) canEnable = false;
+        }
+        if (canEnable) {
+          messageInput.disabled = false;
+          sendBtn.disabled = false;
+          messageInput.focus();
+        }
+      }, COOLDOWN_MS);
+    }
+
+// Load profanity setting from localStorage
+let profanityFilterEnabled = localStorage.getItem("profanityFilter") === "true";
+
+// Sync toggle UI when settings opens
+document.getElementById("openSettings").addEventListener("click", () => {
+  document.getElementById("profanityToggle").checked = profanityFilterEnabled;
+});
+
+// Save toggle changes
+document.getElementById("profanityToggle").addEventListener("change", (e) => {
+  profanityFilterEnabled = e.target.checked;
+  localStorage.setItem("profanityFilter", profanityFilterEnabled ? "true" : "false");
+});
+
+    // updateTimeoutOverlay: shows live countdown until timestamp (ms)
+    function updateTimeoutOverlay(timeoutUntilMs) {
+      if (timeoutInterval) { clearInterval(timeoutInterval); timeoutInterval = null; }
+      function renderRemaining() {
+        const now = Date.now();
+        let remainingMs = timeoutUntilMs - now;
+        if (remainingMs <= 0) {
+          // expired: hide overlay with animation and re-enable input (if allowed)
+          timeoutBanner.style.display = "none";
+          if (overlayContainer.style.display !== "none") hideOverlayAnimated();
+          messageInput.disabled = false;
+          sendBtn.disabled = false;
+          if (timeoutInterval) { clearInterval(timeoutInterval); timeoutInterval = null; }
+          return;
+        }
+        const totalSec = Math.ceil(remainingMs / 1000);
+        const hrs = Math.floor(totalSec / 3600);
+        const mins = Math.floor((totalSec % 3600) / 60);
+        const secs = totalSec % 60;
+        const timeStr = hrs > 0 ? `${hrs}:${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}` 
+                                : `${mins}m ${String(secs).padStart(2,'0')}s`;
+        timeoutBanner.textContent = `🚫 You are timed out! (${timeStr})`;
+        timeoutBanner.style.display = "block";
+      }
+      renderRemaining();
+      timeoutInterval = setInterval(renderRemaining, 1000);
+      messageInput.disabled = true; sendBtn.disabled = true;
+    }
+
+    // Send message (main) with cooldownUntil enforcement
+    sendBtn.addEventListener("click", async () => {
+const uid = auth.currentUser.uid;
+const userRef = doc(db, "users", uid);
+const userSnap = await getDoc(userRef);
+
+// HARD timeout enforcement (already supported by your UI)
+if (
+  userSnap.exists() &&
+  userSnap.data().timeoutUntil &&
+  userSnap.data().timeoutUntil > Date.now()
+) {
+  showOverlay("🚫 You are timed out");
+  return;
+}
+
+// SERVER cooldown (real anti-spam)
+if (userSnap.exists() && userSnap.data().lastMessageAt) {
+  const diff =
+    Date.now() - userSnap.data().lastMessageAt.toMillis();
+
+  if (diff < COOLDOWN_MS) {
+    showOverlay("⏳ Slow down");
+    setTimeout(hideOverlayAnimated, 1200);
+    return;
+  }
+}
+
+let text = messageInput.value.trim();
+if (
+  userSnap.exists() &&
+  userSnap.data().lastMessageText === text
+) {
+  showOverlay("⚠️ Duplicate message blocked");
+  return;
+}
+
+// profanity filter
+if (profanityFilterEnabled) {
+  const badWords = ["fuck", "shit", "bitch", "asshole", "bastard", "dick"]; 
+  badWords.forEach(word => {
+    const regex = new RegExp(`\\b${word}\\b`, "gi");
+    text = text.replace(regex, (match) => "#".repeat(match.length));
+  });
+}
+      if (!text) return;
+      if (!currentCategoryId || !currentChannelId) return alert("Pick a channel first.");
+      const user = auth.currentUser;
+      if (!user) return alert("You must be logged in to send messages.");
+
+      // fetch fresh user doc and channel doc for final client-side check (db rules enforce too)
+      const freshUser = await fetchUserDoc(user.uid) || {};
+      const freshChannel = await fetchChannelDoc(currentCategoryId, currentChannelId) || {};
+
+      const now = Date.now();
+      const timeoutUntil = freshUser.timeoutUntil || 0;
+      const cooldownUntil = freshUser.cooldownUntil || 0;
+      const chattable = !(freshChannel && freshChannel.chattable === false);
+
+      // enforce server-like checks client-side for instant UX
+      if (timeoutUntil > now) {
+        updateTimeoutOverlay(timeoutUntil);
+        return;
+      }
+      if (cooldownUntil > now) {
+        updateCooldownOverlay(cooldownUntil);
+        return;
+      }
+      if (!chattable) {
+        const isAdminField = (freshUser && freshUser.HYHYHY) === true;
+        const isAdminEmail = user.email === ADMIN_EMAIL;
+        if (!isAdminField && !isAdminEmail) {
+          showOverlay("🔒 This channel is locked — only admins can speak");
+          setTimeout(() => hideOverlayAnimated(), 1300);
+          return;
+        }
+      }
+
+      try {
+        // Create message — server/cloud-function will handle:
+        //  - block duplicate messages (server function)
+        //  - delete messages if user is in cooldownUntil (function) — safety net
+        //  - update users/{uid}.lastMessage, channel.lastMessageAt
+        await addDoc(collection(db,"categories",currentCategoryId,"channels",currentChannelId,"messages"), {
+          text,
+          user: user.displayName || (user.email?user.email.split("@")[0]:"Anonymous"),
+          uid: user.uid,
+          pfp: user.photoURL || DEFAULT_PFP,
+          createdAt: serverTimestamp()
+        });
+
+        // set the user's channelStatus.lastRead to now so dot won't re-appear for sender
+        try {
+          await setDoc(doc(db,"users",user.uid,"channelStatus",currentChannelId), { lastRead: serverTimestamp() }, { merge: true });
+        } catch (e) { console.error("failed to update lastRead after send", e); }
+
+        // clear input
+        messageInput.value = "";
+
+        // client local cooldown (2s)
+        triggerLocalCooldown();
+      } catch (e) {
+        // if Firestore rejects due to rules (e.g., cooldownUntil enforced server-side), we catch here
+        console.error("Send failed:", e);
+        // If permission denied due to cooldown, show overlay
+        if (e && e.code && (e.code === 'permission-denied' || e.message && e.message.toLowerCase().includes("permission"))) {
+          // fetch fresh user doc to show the correct cooldown/timeout banner
+          const fresh = await fetchUserDoc(user.uid);
+          if (fresh && fresh.cooldownUntil && fresh.cooldownUntil > Date.now()) {
+            updateCooldownOverlay(fresh.cooldownUntil);
+            return;
+          }
+          if (fresh && fresh.timeoutUntil && fresh.timeoutUntil > Date.now()) {
+            updateTimeoutOverlay(fresh.timeoutUntil);
+            return;
+          }
+          showOverlay("⛔ You are not allowed to send that message.");
+          setTimeout(()=>hideOverlayAnimated(), 1500);
+        } else {
+          alert("Failed to send message: " + (e.message || e));
+        }
+      }
+    });
+
+    messageInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); sendBtn.click(); } });
+let idleTimer = null;
+let offlineTimer = null;
+
+// When user switches tab or minimizes window → instantly idle
+window.addEventListener("blur", () => setIdleInstant());
+
+// When browser tab becomes active again → DO NOTHING
+// (User must move mouse or press key to become active)
+
+// Helper for instant idle
+function setIdleInstant() {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    const presRef = ref(rtdb, "presence/" + user.uid);
+
+    set(presRef, {
+        displayName: user.displayName || user.email.split("@")[0],
+        pfp: user.photoURL || DEFAULT_PFP,
+        idle: true,
+        lastActive: Date.now()
+    });
+}
+
+function markActive() {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    const presRef = ref(rtdb, "presence/" + user.uid);
+
+    // Mark fully active
+    set(presRef, {
+        displayName: user.displayName || user.email.split("@")[0],
+        pfp: user.photoURL || DEFAULT_PFP,
+        idle: false,
+        lastActive: Date.now()
+    });
+
+    // Reset idle timer (30 sec)
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => {
+        // Mark idle (DO NOT CALL markActive HERE)
+        set(presRef, {
+            displayName: user.displayName || user.email.split("@")[0],
+            pfp: user.photoURL || DEFAULT_PFP,
+            idle: true,
+            lastActive: Date.now()
+        });
+    }, 30000);
+
+    // Reset auto-offline timer (1 hour)
+    clearTimeout(offlineTimer);
+    offlineTimer = setTimeout(() => {
+        set(presRef, null); // remove and move to offline list
+    }, 3600000);
+}
+
+// mark active whenever typing occurs
+messageInput.addEventListener("input", markActive);
+window.addEventListener("mousemove", markActive);
+window.addEventListener("keydown", markActive);
+window.addEventListener("click", markActive);
+
+window.addEventListener("mousemove", () => markActive());
+window.addEventListener("keydown", () => markActive());
+window.addEventListener("click", () => markActive());
+window.addEventListener("scroll", () => markActive());
+
+    // Presence (Realtime DB) — shows online users
+function loadUsersPresence() {
+  const presRef = ref(rtdb, "presence");
+  const usersRef = collection(db, "users");
+
+  onValue(presRef, async (snap) => {
+    const onlineUsers = {};
+
+    // Collect REALTIME online users
+    snap.forEach(child => {
+      onlineUsers[child.key] = child.val();
+    });
+
+    // Fetch ALL registered users from Firestore
+    const allUsersSnap = await getDocs(usersRef);
+
+    // DOM lists
+    const onlineList = document.getElementById("userList");
+    const offlineList = document.getElementById("offlineList");
+
+    onlineList.innerHTML = "";
+    offlineList.innerHTML = "";
+
+    allUsersSnap.forEach(userDoc => {
+      const data = userDoc.data();
+      const uid = userDoc.id;
+
+      const div = document.createElement("div");
+      div.className = "userItem";
+      div.dataset.uid = uid;   // ← IMPORTANT
+
+      const avatar = document.createElement("img");
+      avatar.className = "userAvatar";
+      avatar.src = data.pfp || DEFAULT_PFP;
+
+      const name = document.createElement("div");
+      name.textContent = data.username || "Unknown";
+
+      div.appendChild(avatar);
+      div.appendChild(name);
+      div.addEventListener("click", async () => {
+        openUserProfile(uid);
+      });
+
+      // Determine whether user is online or offline
+      if (onlineUsers[uid]) {
+    // ONLINE
+
+    // check idle
+    if (onlineUsers[uid].idle === true) {
+      const idleTag = document.createElement("span");
+      idleTag.textContent = "idle";
+      idleTag.style.color = "yellow";
+      idleTag.style.marginLeft = "6px";
+      idleTag.style.fontSize = "12px";
+      div.appendChild(idleTag);
+    }
+
+    onlineList.appendChild(div);
+} else {
+    // OFFLINE
+    div.classList.add("offline");
+    offlineList.appendChild(div);
+}
+    });
+  });
+}
+
+    // --- Auth handlers (signup/login/logout/update) in Settings modal ---
+    signUpBtn.addEventListener("click", async () => {
+      const username = (usernameField.value || "").trim().toLowerCase();
+      const password = passwordField.value;
+      const pfp = pfpField.value || DEFAULT_PFP;
+      if (!username || !password) return alert("Enter username & password");
+      try {
+        // ensure username uniqueness using usernames collection as index
+        const unameRef = doc(db,"usernames",username);
+        const snap = await getDoc(unameRef);
+        if (snap.exists()) return alert("That username is already taken. Choose another.");
+        const cred = await createUserWithEmailAndPassword(auth, username + "@chat.com", password);
+        await updateProfile(cred.user, { displayName: username, photoURL: pfp });
+        await setDoc(unameRef, { uid: cred.user.uid });
+        await setDoc(doc(db,"users",cred.user.uid), { username, pfp, HYHYHY: false, timeoutUntil: 0, cooldownUntil: 0 });
+        alert("Account created and signed in.");
+        settingsOverlay.style.display = "none";
+      } catch (e) { console.error(e); alert(e.message); }
+    });
+
+    loginBtn.addEventListener("click", async () => {
+      const username = (usernameField.value || "").trim().toLowerCase();
+      const password = passwordField.value;
+      if (!username || !password) return alert("Enter username & password");
+      try {
+        const unameRef = doc(db,"usernames",username);
+        const snap = await getDoc(unameRef);
+        if (!snap.exists()) return alert("That username does not exist.");
+        await signInWithEmailAndPassword(auth, username + "@chat.com", password);
+        settingsOverlay.style.display = "none";
+      } catch (e) { console.error(e); alert(e.message); }
+    });
+
+    logoutBtn.addEventListener("click", async () => {
+      try {
+        await signOut(auth);
+        // clear UI
+        messageInput.disabled = true; messageInput.placeholder = "Select a channel to start chatting..."; sendBtn.disabled = true;
+        addEntityBtn.style.display = "none";
+        settingsOverlay.style.display = "none";
+        currentUserDoc = null;
+      } catch (e) { console.error(e); alert(e.message); }
+    });
+
+    updateProfileBtn.addEventListener("click", async () => {
+      const pfp = pfpField.value;
+      try {
+        if (auth.currentUser && pfp) { await updateProfile(auth.currentUser, { photoURL: pfp }); alert("Profile updated."); }
+        else alert("Login and set a picture URL first.");
+      } catch (e) { console.error(e); alert(e.message); }
+    });
+
+    // --- Main Auth modal logic ---
+    let authMode = "signup"; // "signup" | "login"
+    function setAuthMode(m){
+      authMode = m;
+      if (m === "signup") { authTitle.textContent = "Sign Up"; authActionBtn.textContent = "Sign Up"; toggleAuth.textContent = "Log In"; }
+      else { authTitle.textContent = "Log In"; authActionBtn.textContent = "Log In"; toggleAuth.textContent = "Sign Up"; }
+    }
+    setAuthMode("signup");
+
+    toggleAuth.addEventListener("click", () => {
+      setAuthMode(authMode === "signup" ? "login" : "signup");
+    });
+
+    authActionBtn.addEventListener("click", async () => {
+      const username = (authUsername.value || "").trim().toLowerCase();
+if (username.length > 20) {
+  alert("Username must be 20 characters or less.");
+  return;
+}
+      const password = authPassword.value;
+      const pfp = authPfp.value || DEFAULT_PFP;
+      if (!username || !password) return alert("Enter username & password");
+      const unameRef = doc(db,"usernames",username);
+      if (authMode === "signup") {
+        const snap = await getDoc(unameRef);
+        if (snap.exists()) return alert("That username is already taken!");
+        try {
+          const cred = await createUserWithEmailAndPassword(auth, username + "@chat.com", password);
+          await updateProfile(cred.user, { displayName: username, photoURL: pfp });
+          await setDoc(unameRef, { uid: cred.user.uid });
+          await setDoc(doc(db,"users",cred.user.uid), { username, pfp, HYHYHY: false, timeoutUntil: 0, cooldownUntil: 0 });
+        } catch (e) { console.error(e); alert(e.message); }
+      } else {
+        const snap = await getDoc(unameRef);
+        if (!snap.exists()) return alert("No account with that username.");
+        try {
+          await signInWithEmailAndPassword(auth, username + "@chat.com", password);
+        } catch (e) { console.error(e); alert(e.message); }
+      }
+    });
+
+    // Settings open/close
+    document.getElementById("openSettings")?.addEventListener("click", ()=> settingsOverlay.style.display = "flex");
+    settingsClose?.addEventListener("click", ()=> settingsOverlay.style.display = "none");
+
+    // --- Auth state handling ---
+    onAuthStateChanged(auth, async (user) => {
+      if (user) {
+if (user) {
+  showUpdatesUI();
+}
+}
+      if (user) {
+
+const userRef = doc(db, "users", user.uid);
+const snap = await getDoc(userRef);
+
+if (!snap.exists()) {
+  await setDoc(userRef, {
+    username: authUsername.value.trim(),
+    pfp: authPfp.value.trim() || DEFAULT_PFP,
+    online: true
+  });
+} else {
+  await setDoc(
+    userRef,
+    { online: true },
+    { merge: true }
+  );
+}
+
+        // ensure users/{uid} exists
+        try {
+          const uRef = doc(db,"users",user.uid);
+          const uSnap = await getDoc(uRef);
+          if (!uSnap.exists()) {
+            await setDoc(uRef, {
+              username: user.displayName || (user.email?user.email.split("@")[0]:"user"),
+              pfp: user.photoURL || DEFAULT_PFP,
+              HYHYHY: false,
+              timeoutUntil: 0,
+              cooldownUntil: 0
+            });
+          }
+        } catch (e) { console.error("auto-create user doc error:", e); }
+
+        // presence
+// presence with idle system
+const presRef = ref(rtdb, "presence/" + user.uid);
+try {
+  await set(presRef, {
+    displayName: user.displayName || (user.email ? user.email.split("@")[0] : "Unknown"),
+    pfp: user.photoURL || DEFAULT_PFP,
+    idle: false,
+    lastActive: Date.now()
+  });
+  onDisconnect(presRef).remove();
+} catch (e) { console.error("presence error", e); }
+
+        // fetch users/{uid}
+        currentUserDoc = await fetchUserDoc(user.uid);
+
+        // admin create buttons: show if admin or ADMIN_EMAIL
+        const HYHYHY = (currentUserDoc && currentUserDoc.HYHYHY) || user.email === ADMIN_EMAIL;
+        if (HYHYHY) addEntityBtn.style.display = "inline-flex"; else addEntityBtn.style.display = "none";
+
+        // hide forced modal
+        authOverlay.style.display = "none";
+
+        // enable input only when channel selected
+        messageInput.disabled = !currentChannelId;
+        sendBtn.disabled = !currentChannelId;
+
+        // load categories & presence
+window.openChannelContextMenu = function ({ x, y, type, catId, chanId }) {
+  document.querySelectorAll(".channelContextMenu").forEach(m => m.remove());
+
+  const menu = document.createElement("div");
+// 🔒 LOCK / UNLOCK — CHANNEL ONLY
+if (type === "channel") {
+  const lockBtn = document.createElement("button");
+  lockBtn.className = "channelContextBtn";
+  lockBtn.title = "Lock / Unlock channel";
+
+  // icon updates live
+  (async () => {
+    const snap = await getDoc(doc(db, "categories", catId, "channels", chanId));
+    lockBtn.textContent =
+      snap.exists() && snap.data().chattable === false ? "🔓" : "🔒";
+  })();
+
+  lockBtn.onclick = async () => {
+    const ref = doc(db, "categories", catId, "channels", chanId);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) return;
+
+    const locked = snap.data().chattable === false;
+
+    await setDoc(ref, { chattable: locked }, { merge: true });
+    menu.remove();
+  };
+
+  menu.appendChild(lockBtn);
+}
+
+  menu.className = "channelContextMenu";
+  menu.style.left = x + "px";
+  menu.style.top = y + "px";
+
+  const renameBtn = document.createElement("button");
+  renameBtn.className = "channelContextBtn";
+  renameBtn.textContent = "✏️";
+  renameBtn.title = "Rename";
+
+  renameBtn.onclick = async () => {
+    const newName = prompt("Enter new name:");
+    if (!newName) return;
+
+    if (type === "category") {
+      await setDoc(
+        doc(db, "categories", catId),
+        { name: newName },
+        { merge: true }
+      );
+    } else {
+      await setDoc(
+        doc(db, "categories", catId, "channels", chanId),
+        { name: newName },
+        { merge: true }
+      );
+    }
+
+    menu.remove();
+  };
+
+  const moveBtn = document.createElement("button");
+  moveBtn.className = "channelContextBtn";
+  moveBtn.textContent = "📦";
+  moveBtn.title = "Move";
+  moveBtn.onclick = () => menu.remove();
+
+  const deleteBtn = document.createElement("button");
+  deleteBtn.className = "channelContextBtn danger";
+  deleteBtn.textContent = "🗑";
+  deleteBtn.title = "Delete";
+
+  deleteBtn.onclick = async () => {
+    if (!confirm("Delete this?")) return;
+
+    if (type === "category") {
+      await deleteDoc(doc(db, "categories", catId));
+    } else {
+      await deleteDoc(doc(db, "categories", catId, "channels", chanId));
+    }
+
+    menu.remove();
+  };
+
+  menu.append(renameBtn, moveBtn, deleteBtn);
+  document.body.appendChild(menu);
+
+  document.addEventListener("click", () => menu.remove(), { once: true });
+}
+
+        loadCategoriesRealtime();
+        loadUsersPresence();
+      } else {
+        // not logged in — show forced modal
+        authOverlay.style.display = "flex";
+        messageInput.disabled = true; messageInput.placeholder = "Select a channel to start chatting..."; sendBtn.disabled = true;
+        addEntityBtn.style.display = "none";
+        currentUserDoc = null;
+        loadCategoriesRealtime();
+        loadUsersPresence();
+      }
+    });
+
+    // initial load
+    loadCategoriesRealtime();
+    loadUsersPresence();
+
+  </script>
+  <script>
+document.addEventListener('DOMContentLoaded', (event) => {
+    // Select all iframes on the page
+    const lazyIframes = document.querySelectorAll('iframe[data-src]');
+
+    const iframeObserver = new IntersectionObserver((entries, observer) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                const iframe = entry.target;
+                const src = iframe.getAttribute('data-src');
+                
+                // Only load if the data-src is present
+                if (src) {
+                    iframe.setAttribute('src', src);
+                    iframe.removeAttribute('data-src'); // Optional: remove the data attribute
+                    observer.unobserve(iframe); // Stop observing once loaded
+                }
+            }
+        });
+    }, {
+        rootMargin: '0px 0px 50px 0px', // Preload when 50px from viewport
+        threshold: 0.0 // Trigger as soon as even a small part is visible
+    });
+
+    // Start observing each iframe
+    lazyIframes.forEach(iframe => {
+        iframeObserver.observe(iframe);
+    });
+});
+
+let profileViewingUID = null;
+
+async function openUserProfile(uid) {
+  profileViewingUID = uid;
+
+  const overlay = document.getElementById("userProfileOverlay");
+  const pfpEl = document.getElementById("profilePfp");
+  const nameEl = document.getElementById("profileUsername");
+
+  const snap = await getDoc(doc(db, "users", uid));
+  if (!snap.exists()) return;
+
+  const data = snap.data();
+
+  pfpEl.src = data.pfp || DEFAULT_PFP;
+  nameEl.textContent = data.username || "Unknown";
+
+  overlay.style.display = "flex";
+}
+
+// Close profile
+document.getElementById("closeUserProfile").addEventListener("click", () => {
+  document.getElementById("userProfileOverlay").style.display = "none";
+});
+
+// Clicking outside closes popup
+document.getElementById("userProfileOverlay").addEventListener("click", (e) => {
+  if (e.target.id === "userProfileOverlay") {
+    e.target.style.display = "none";
+  }
+});
+
+document.getElementById("messageUserBtn").addEventListener("click", () => {
+  document.getElementById("userProfileOverlay").style.display = "none";
+
+  // Focus message box (starts messaging)
+  const msgBox = document.getElementById("messageInput");
+  msgBox.focus();
+});
+
+document.getElementById("reportUserBtn").addEventListener("click", () => {
+  // Close profile UI
+  document.getElementById("userProfileOverlay").style.display = "none";
+
+  // Load form
+  const form = document.getElementById("reportFormFrame");
+
+  // Your Google Form link
+  const googleFormBase = "https://docs.google.com/forms/d/e/1FAIpQLSfwomY_IZXnvJ5SmA3whFdvt5P2r7gL8vYVVQx0UK8Hp_jLnQ/viewform?usp=publish-editor";
+
+  // Optional: Pre-fill UID (requires a form field with entry.#)
+  const prefill = "&entry.123456789=" + encodeURIComponent(profileViewingUID);
+
+  form.src = googleFormBase + prefill;
+
+  document.getElementById("reportOverlay").style.display = "flex";
+});
+
+document.getElementById("closeReportOverlay").addEventListener("click", () => {
+  document.getElementById("reportOverlay").style.display = "none";
+});
+ </script>
+  <script>
+(function() {
+  // Detects any Google Drive link + extracts file ID from /file/d/... or ?id=
+  const driveFilePattern1 = /https?:\/\/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/i;
+  const driveFilePattern2 = /[?&]id=([a-zA-Z0-9_-]+)/i;
+  const fullDriveUrlPattern = /(https?:\/\/(?:drive|docs)\.google\.com\/\S+)/gi;
+
+  function createDownloadButton(fileId) {
+    const btn = document.createElement("button");
+    btn.textContent = "Download";
+    btn.style.padding = "6px 12px";
+    btn.style.margin = "4px 0";
+    btn.style.cursor = "pointer";
+    btn.style.background = "#5865f2";
+    btn.style.color = "white";
+    btn.style.border = "none";
+
+    btn.onclick = () => {
+      window.open("https://drive.google.com/uc?export=download&id=" + fileId, "_blank");
+    };
+
+    return btn;
+  }
+
+  function processNode(node) {
+    if (!node) return;
+
+    // TEXT NODE — check for Drive link and remove it
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = node.textContent;
+
+      // Try extracting File ID
+      let match = text.match(driveFilePattern1);
+      let fileId = match ? match[1] : null;
+
+      if (!fileId) {
+        match = text.match(driveFilePattern2);
+        if (match) fileId = match[1];
+      }
+
+      // If no file ID → skip
+      if (!fileId) return;
+
+      // Remove the link from the text
+      const cleaned = text.replace(fullDriveUrlPattern, "").trim();
+      if (cleaned !== text) {
+        node.textContent = cleaned;
+      }
+    }
+
+    // ELEMENT NODE — handle <a> tags and children
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      // Remove <a href="...drive.google.com..."> and replace with button
+      if (
+        node.matches &&
+        node.matches('a[href*="drive.google.com"], a[href*="docs.google.com"]')
+      ) {
+        // Extract file ID from href
+        let href = node.getAttribute("href");
+        let match = href.match(driveFilePattern1) || href.match(driveFilePattern2);
+        if (match) {
+          const fileId = match[1];
+          const btn = createDownloadButton(fileId);
+          node.replaceWith(btn);
+        } else {
+          node.remove(); // Not a file link → remove
+        }
+        return;
+      }
+
+      // Recurse into DOM
+      node.childNodes.forEach(processNode);
+    }
+  }
+
+  // Run every 1 ms
+  setInterval(() => {
+    processNode(document.body);
+  }, 1);
+
+})();
+  </script>
+  <script>
+(function () {
+    const videoExts = ["mp4", "webm", "mov", "m4v", "ogg"];
+    const imageExts = ["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"];
+
+    function processMessages() {
+        document.querySelectorAll(".message-content").forEach(container => {
+            const msgText = container.querySelector(".message-text");
+            if (!msgText) return;
+
+            // Prevent double-processing
+            if (msgText.dataset.mediaProcessed === "1") return;
+
+            let text = msgText.innerHTML;
+
+            // Regex to find URLs or data URLs
+            const urlRegex = /(https?:\/\/[^\s<]+)|(www\.[^\s<]+)|(data:[^"' ]+)/g;
+
+            let match;
+            let foundURL = null;
+            let type = null;
+
+            while ((match = urlRegex.exec(text)) !== null) {
+                const url = match[0];
+
+                // Detect data:image base64
+                if (url.startsWith("data:image/")) {
+                    foundURL = url;
+                    type = "image";
+                    break;
+                }
+
+                // Detect data:video base64
+                if (url.startsWith("data:video/")) {
+                    foundURL = url;
+                    type = "video";
+                    break;
+                }
+
+                // Extract normal extension
+                const ext = url.split(".").pop().toLowerCase().split(/[?#]/)[0];
+
+                if (videoExts.includes(ext)) {
+                    foundURL = url;
+                    type = "video";
+                    break;
+                }
+
+                if (imageExts.includes(ext)) {
+                    foundURL = url;
+                    type = "image";
+                    break;
+                }
+            }
+
+            if (foundURL) {
+                // Remove ONLY the link text
+                msgText.innerHTML = text.replace(foundURL, "").trim();
+
+                let element;
+
+                if (type === "video") {
+                    element = document.createElement("video");
+                    element.controls = true;
+                    element.src = foundURL;
+                    element.style.maxWidth = "77%";
+                    element.style.display = "block";
+                    element.style.marginTop = "8px";
+                    element.style.borderRadius = "8px";
+                }
+
+                if (type === "image") {
+                    element = document.createElement("img");
+                    element.src = foundURL;
+                    element.style.maxWidth = "77%";
+                    element.style.display = "block";
+                    element.style.marginTop = "8px";
+                    element.style.borderRadius = "8px";
+                }
+
+                container.appendChild(element);
+            }
+
+            msgText.dataset.mediaProcessed = "1";
+        });
+    }
+
+    // Continuously scan dynamically added messages
+    setInterval(processMessages, 150);
+})();
+  </script>
+<script>
+(function () {
+    const audioExts = ["mp3", "wav", "ogg", "m4a", "flac"];
+
+    function processMessages() {
+        document.querySelectorAll(".message-content").forEach(container => {
+            const msgText = container.querySelector(".message-text");
+            if (!msgText) return;
+
+            // Prevent double-processing
+            if (msgText.dataset.audioProcessed === "1") return;
+
+            let text = msgText.innerHTML;
+
+            // Regex to find URLs
+            const urlRegex = /(https?:\/\/[^\s<]+)/g;
+
+            let match;
+            while ((match = urlRegex.exec(text)) !== null) {
+                const url = match[0];
+
+                const lower = url.toLowerCase();
+                const ext = lower.split(".").pop().split(/[?#]/)[0];
+
+                // Only Catbox audio links
+                if (lower.startsWith("https://files.catbox.moe/") && audioExts.includes(ext)) {
+                    // Remove ONLY the link text
+                    msgText.innerHTML = text.replace(url, "").trim();
+
+                    // Create audio element
+                    const audio = document.createElement("audio");
+                    audio.controls = true;
+                    audio.src = url;
+                    audio.style.display = "block";
+                    audio.style.marginTop = "8px";
+
+                    container.appendChild(audio);
+                    break; // Only embed first found audio per message
+                }
+            }
+
+            msgText.dataset.audioProcessed = "1";
+        });
+    }
+
+    // Continuously scan dynamically added messages
+    setInterval(processMessages, 150);
+})();
+</script>
+</script>
+<script>
+/* BUTTON LOGIC */
+const pollBtn = document.getElementById("pollMenuBtn");
+const pollMenu = document.getElementById("pollMenuOverlay");
+const closePollMenu = document.getElementById("closePollMenu");
+const openPollsUI = document.getElementById("openPollsUI");
+
+pollBtn.onclick = () => pollMenu.style.display = "flex";
+closePollMenu.onclick = () => pollMenu.style.display = "none";
+
+/* POLL CREATOR LOGIC */
+const pollCreator = document.getElementById("pollCreatorOverlay");
+const cancelPollCreator = document.getElementById("cancelPollCreator");
+
+openPollsUI.onclick = () => {
+    pollMenu.style.display = "none";
+    pollCreator.style.display = "flex";
+    resetPollCreator();
+};
+
+cancelPollCreator.onclick = () => pollCreator.style.display = "none";
+
+/* Create option block with remove button */
+function createOption(number) {
+    const div = document.createElement("div");
+    div.style.marginTop = "10px";
+    div.style.display = "flex";
+    div.style.alignItems = "center";
+    div.style.gap = "8px";
+
+    const input = document.createElement("input");
+    input.className = "pollOptionInput";
+    input.value = `Option ${number}`;
+    input.style.flex = "1";
+    input.style.padding = "10px";
+    input.style.background = "#202225";
+    input.style.color = "white";
+    input.style.border = "1px solid #3c3c3c";
+    input.style.borderRadius = "6px";
+
+    const delBtn = document.createElement("button");
+    delBtn.textContent = "X";
+    delBtn.style.background = "#ff4c4c";
+    delBtn.style.border = "none";
+    delBtn.style.color = "white";
+    delBtn.style.fontWeight = "700";
+    delBtn.style.borderRadius = "6px";
+    delBtn.style.padding = "6px 10px";
+    delBtn.style.cursor = "pointer";
+
+    delBtn.onclick = () => {
+        const container = document.getElementById("pollOptions");
+        if (container.children.length <= 2) {
+            alert("You need at least 2 options.");
+            return;
+        }
+        div.remove();
+    };
+
+    div.appendChild(input);
+    div.appendChild(delBtn);
+    return div;
+}
+
+/* Reset options to Option 1 + Option 2 */
+function resetPollCreator() {
+    const options = document.getElementById("pollOptions");
+    options.innerHTML = "";
+    options.appendChild(createOption(1));
+    options.appendChild(createOption(2));
+}
+
+/* Add new option */
+document.getElementById("addPollOption").onclick = () => {
+    const options = document.getElementById("pollOptions");
+    const count = options.children.length + 1;
+    options.appendChild(createOption(count));
+};
+
+/* Apply Poll (generates message text) */
+document.getElementById("applyPoll").onclick = () => {
+    const q = document.getElementById("pollQuestion").value.trim();
+    const opts = [...document.querySelectorAll(".pollOptionInput")]
+        .map(o => o.value.trim())
+        .filter(v => v);
+
+    if (!q) {
+        alert("Enter a question.");
+        return;
+    }
+    if (opts.length < 2) {
+        alert("At least 2 options are required.");
+        return;
+    }
+
+    const final = `/createpoll {((${q})), ${opts.map(o => `[${o}]`).join(", ")}}`;
+
+    const input = document.getElementById("messageInput");
+    input.value = final;
+
+    pollCreator.style.display = "none";
+};
+</script>
+<script>
+/* ================= CORE ================= */
+let debugVisible = false;
+let keys = {};
+
+addEventListener("keydown", e => {
+ keys[e.key.toLowerCase()] = true;
+ if (keys["`"] && keys["o"]) toggleDebug();
+});
+addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
+
+/* ================= PANEL ================= */
+const panel = document.createElement("div");
+panel.style = `
+position:fixed;top:10px;left:10px;
+color:#aaffaa;font-family:monospace;font-size:14px;
+background:rgba(0,0,0,.85);padding:10px;
+white-space:pre;z-index:999999;display:none;
+border:1px solid rgba(170,255,170,.4);
+user-select:none;width:380px;
+`;
+document.body.appendChild(panel);
+
+/* HEADER */
+const header = document.createElement("div");
+header.textContent = "Debug Console  >";
+header.style = "cursor:pointer;margin-bottom:6px;";
+panel.appendChild(header);
+
+/* STATS */
+const stats = document.createElement("div");
+panel.appendChild(stats);
+
+/* LOG */
+const logBox = document.createElement("div");
+logBox.style = `
+margin-top:6px;
+background:rgba(0,0,0,.6);
+border-top:1px solid rgba(170,255,170,.3);
+max-height:0px;
+overflow-y:auto;
+font-size:12px;
+resize:vertical;
+`;
+panel.appendChild(logBox);
+
+/* INPUT */
+const input = document.createElement("input");
+input.style = `
+width:100%;
+background:black;color:#aaffaa;
+border:none;border-top:1px solid rgba(170,255,170,.3);
+font-family:monospace;font-size:13px;
+padding:4px;display:none;
+`;
+input.placeholder = "> command";
+panel.appendChild(input);
+
+/* TOGGLE */
+let consoleOpen = false;
+header.onclick = () => {
+ consoleOpen = !consoleOpen;
+ logBox.style.maxHeight = consoleOpen ? "220px" : "0px";
+ input.style.display = consoleOpen ? "block" : "none";
+ header.textContent = "Debug Console  " + (consoleOpen ? "<" : ">");
+};
+
+function toggleDebug() {
+ debugVisible = !debugVisible;
+ panel.style.display = debugVisible ? "block" : "none";
+ if (debugVisible) input.focus();
+}
+
+/* ================= DRAG ================= */
+let drag = false, ox = 0, oy = 0;
+panel.onmousedown = e => {
+ const r = panel.getBoundingClientRect();
+ const x = e.clientX - r.left, y = e.clientY - r.top;
+ if (x < 10 || x > r.width - 10 || y < 10 || y > r.height - 10) {
+  drag = true; ox = x; oy = y;
+ }
+};
+onmousemove = e => drag && (
+ panel.style.left = e.clientX - ox + "px",
+ panel.style.top = e.clientY - oy + "px"
+);
+onmouseup = () => drag = false;
+
+/* ================= ADVANCED DEBUG ================= */
+let last = performance.now(), fps = 0, frameMS = 0, acc = 0, frames = 0, lowTimer = 0;
+
+function getGPU() {
+ try {
+  const c = document.createElement("canvas");
+  const g = c.getContext("webgl");
+  const e = g.getExtension("WEBGL_debug_renderer_info");
+  return g.getParameter(e.UNMASKED_RENDERER_WEBGL);
+ } catch { return "Unknown"; }
+}
+
+requestAnimationFrame(function loop(now) {
+ const d = now - last; last = now;
+ const rawFPS = 1000 / d;
+ frameMS = d;
+
+ acc += d; frames++;
+ rawFPS < 45 ? lowTimer += d : lowTimer = Math.max(0, lowTimer - d * 2);
+
+ if (acc >= 250) {
+  fps = (frames * 1000 / acc) | 0;
+  acc = frames = 0;
+ }
+
+ const mem = performance.memory;
+
+ stats.textContent = `
+FPS: ${fps}
+Frame: ${frameMS.toFixed(2)} ms
+CPU Threads: ${navigator.hardwareConcurrency}
+RAM: ${navigator.deviceMemory || "?"} GB
+JS Heap: ${mem ? (mem.usedJSHeapSize / 1048576).toFixed(1) + " MB" : "N/A"}
+GPU: ${getGPU()}
+Status: ${
+  fps < 30 ? "⚠ FPS Critical" :
+  fps < 50 ? "⚠ FPS Dropping" :
+  lowTimer > 2000 ? "⚠ Sustained Lag" :
+  "✔ Stable"
+ }
+`.trim();
+
+ requestAnimationFrame(loop);
+});
+
+/* ================= COMMAND SYSTEM ================= */
+const history = [];
+let h = 0;
+
+const hiddenCommands = new Set(["$goon", "$overlaymedia"]);
+
+input.onkeydown = e => {
+ if (e.key === "Enter") {
+  const raw = input.value.trim();
+  if (!raw) return;
+  const cmd = raw.split(" ")[0].toLowerCase();
+  if (!hiddenCommands.has(cmd)) log("> " + raw);
+  run(raw);
+  history.push(raw); h = history.length;
+  input.value = "";
+ }
+ if (e.key === "ArrowUp") input.value = history[Math.max(0, --h)] || "";
+ if (e.key === "ArrowDown") input.value = history[Math.min(history.length, ++h)] || "";
+};
+
+function log(msg, c = "#aaffaa") {
+ logBox.innerHTML += `<div style="color:${c}">${msg}</div>`;
+ logBox.scrollTop = 1e9;
+}
+
+/* ================= COMMANDS ================= */
+const commands = {};
+
+/* BASIC */
+commands.$help = { desc:"List commands", run(){
+ Object.entries(commands).forEach(([k,v])=>{
+  if(!hiddenCommands.has(k)) log(`${k} — ${v.desc}`);
+ });
+}};
+commands.$clear = { desc:"Clear console", run(){ logBox.innerHTML=""; }};
+commands.$editdoc = { desc:"Toggle designMode", run(){
+ document.designMode = document.designMode === "on" ? "off" : "on";
+ log("designMode = " + document.designMode);
+}};
+commands.$eval = { desc:"Eval JS", run(a){
+ try { log(String(Function(`return ${a}`)())); }
+ catch(e){ log(e.message,"#f88"); }
+}};
+
+/* ================= DISCO (FULLSCREEN RGB) ================= */
+let discoOverlay = null;
+
+commands.$disco = {
+ desc:"Fullscreen RGB disco",
+ run(){
+  if(discoOverlay){
+   discoOverlay.remove();
+   discoOverlay = null;
+   document.body.classList.remove("shake");
+   return;
+  }
+
+  discoOverlay = document.createElement("div");
+  discoOverlay.style = `
+   position:fixed;inset:0;
+   z-index:9999998;
+   pointer-events:none;
+   animation:rgbFlash .6s linear infinite;
+   opacity:0.2;
+  `;
+  document.body.appendChild(discoOverlay);
+  document.body.classList.add("shake");
+ }
+};
+
+commands.$crt = { desc:"CRT scanlines", run(){
+ document.body.classList.toggle("crt");
+}};
+
+/* ================= CHAOS ================= */
+commands.$panic = { desc:"Fake errors", run(){
+ for(let i=0;i<12;i++) setTimeout(()=>log("⚠ SYSTEM ERROR","#f88"),i*80);
+}};
+commands.$hack = { desc:"Fake hacking", run(){
+ ["Accessing kernel…","Bypassing firewall…","Injecting payload…","Done."]
+ .forEach((t,i)=>setTimeout(()=>log(t),i*600));
+}};
+commands.$freeze = { desc:"Freeze page", run(){
+ document.body.style.pointerEvents="none";
+ document.body.style.filter="blur(2px)";
+}};
+commands.$unfreeze = { desc:"Unfreeze page", run(){
+ document.body.style.pointerEvents="";
+ document.body.style.filter="";
+}};
+
+/* ================= HIDDEN ================= */
+commands.$goon = { desc:"", run:goon };
+commands.$overlaymedia = { desc:"", run(){
+ if(window.__overlay) return;
+ window.__overlay = true;
+
+ const img = document.createElement("img");
+ img.src="https://media.tenor.com/2roX3uxz_68AAAAC/cat-space.gif";
+ img.style="position:fixed;inset:0;width:100vw;height:100vh;object-fit:cover;z-index:9999999";
+ document.body.appendChild(img);
+
+ const a = document.createElement("audio");
+ a.src="https://files.catbox.moe/1n6l6y.mp3";
+ a.loop=true; a.autoplay=true;
+ document.body.appendChild(a);
+}};
+
+/* ================= RUNNER ================= */
+function run(raw){
+ const [cmd,...args] = raw.split(" ");
+ const c = commands[cmd.toLowerCase()];
+ c ? c.run(args.join(" ")) :
+ !hiddenCommands.has(cmd.toLowerCase()) && log("Unknown command","#888");
+}
+
+/* ================= EFFECTS ================= */
+let goonVideo;
+function goon(){
+ if(goonVideo) return;
+ goonVideo = document.createElement("video");
+ goonVideo.src="https://files.catbox.moe/ev54v0.mp4";
+ goonVideo.autoplay=true;
+ goonVideo.loop=true;
+ goonVideo.playsInline=true;
+ goonVideo.style="position:fixed;inset:0;width:100vw;height:100vh;object-fit:cover;z-index:9999999";
+ document.body.appendChild(goonVideo);
+ goonVideo.play().catch(()=>{});
+}
+
+/* ================= STYLES ================= */
+const style = document.createElement("style");
+style.textContent = `
+@keyframes rgbFlash{
+ 0%{background:red}
+ 33%{background:lime}
+ 66%{background:blue}
+ 100%{background:red}
+}
+.crt::before{
+ content:"";position:fixed;inset:0;
+ background:repeating-linear-gradient(#0000,#0000 2px,#0003 3px);
+ pointer-events:none;z-index:99999999;
+}
+`;
+document.head.appendChild(style);
+</script>
+<script>
+(function() {
+    const MAX_CONTEXTS = 8; // Recommended limit for stability
+    const activeContexts = [];
+
+    const originalGetContext = HTMLCanvasElement.prototype.getContext;
+
+    HTMLCanvasElement.prototype.getContext = function(type, attributes) {
+        if (type === 'webgl' || type === 'webgl2' || type === 'experimental-webgl') {
+            // If we've reached the limit, force the oldest context to close
+            if (activeContexts.length >= MAX_CONTEXTS) {
+                const oldest = activeContexts.shift();
+                if (oldest) {
+                    const extension = oldest.getExtension('WEBGL_lose_context');
+                    if (extension) extension.loseContext();
+                }
+            }
+            
+            const context = originalGetContext.apply(this, arguments);
+            if (context) activeContexts.push(context);
+            return context;
+        }
+        return originalGetContext.apply(this, arguments);
+    };
+})();
+</script>
+<script>
+(() => {
+  // Only run on large screens
+  if (!window.matchMedia("(min-width: 1024px)").matches) return;
+
+  // Inject optimized CSS
+  const style = document.createElement("style");
+  style.textContent = `
+    .message {
+      transition: opacity 0.2s ease;
+      contain: paint;
+      will-change: opacity;
+    }
+    .message.__offscreen {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+  `;
+  document.head.appendChild(style);
+
+  // Single shared observer (cheap)
+  const observer = new IntersectionObserver(
+    entries => {
+      for (const entry of entries) {
+        entry.target.classList.toggle(
+          "__offscreen",
+          !entry.isIntersecting
+        );
+      }
+    },
+    {
+      threshold: 0,
+      // Start fading slightly before fully leaving viewport
+      rootMargin: "200px 0px 200px 0px"
+    }
+  );
+
+  // Observe existing messages
+  const messages = document.querySelectorAll(".message");
+  for (const el of messages) {
+    observer.observe(el);
+  }
+
+  // OPTIONAL: handle dynamically added messages (cheap guard)
+  if (messages.length < 2000) {
+    const mo = new MutationObserver(mutations => {
+      for (const m of mutations) {
+        for (const node of m.addedNodes) {
+          if (
+            node.nodeType === 1 &&
+            node.classList?.contains("message")
+          ) {
+            observer.observe(node);
+          }
+        }
+      }
+    });
+
+    mo.observe(document.body, { childList: true, subtree: true });
+  }
+})();
+</script>
+
+</body>
+</html>
